@@ -231,8 +231,12 @@ function formatDueDate(task: DashboardTask) {
 
 function cleanChecklistItem(value: string) {
   return value
-    .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '')
+    .replace(/^\s*(?:[-*•]|\d+[.)]?)\s*/, '')
     .trim()
+}
+
+function isProjectHeader(value: string) {
+  return !/^\s*(?:[-*•]|\d+[.)])\s*/.test(value) && /\bproject\b\s*:?\s*$/i.test(value.trim())
 }
 
 function buildTaskInputs(
@@ -259,6 +263,35 @@ function buildTaskInputs(
             : 'normal',
       } satisfies NewTaskInput,
     ]
+  }
+
+  const projectHeaderCount = lines.filter(isProjectHeader).length
+  if (projectHeaderCount > 0) {
+    const taskInputs: NewTaskInput[] = []
+    let currentProject = 'General'
+
+    for (const line of lines) {
+      if (isProjectHeader(line)) {
+        currentProject = line.replace(/:\s*$/, '').trim()
+        continue
+      }
+
+      const title = cleanChecklistItem(line)
+      if (!title) continue
+
+      taskInputs.push({
+        title,
+        area: 'ukg',
+        notes: currentProject,
+        due_at: dueAt,
+        reminder_minutes: reminderMinutes,
+        priority: 'normal',
+      })
+    }
+
+    if (taskInputs.length) {
+      return taskInputs
+    }
   }
 
   const [project, ...items] = lines
@@ -1151,7 +1184,7 @@ function App() {
       <form className="capture-panel" onSubmit={handleAddTask}>
         <textarea
           value={draft}
-          placeholder="Brain dump anything. For UKG projects: first line is the project, next lines are checkable to-dos."
+          placeholder="Brain dump anything. For UKG: use Project headers, then numbered or bulleted to-dos."
           onChange={(event) => setDraft(event.target.value)}
         />
         <div className="capture-controls">
