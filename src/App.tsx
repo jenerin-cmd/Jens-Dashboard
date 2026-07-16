@@ -1079,6 +1079,17 @@ function App() {
         .filter((item): item is AreaConfig => Boolean(item)),
     [areaByKey, areaOrder],
   )
+  const areaColumns = useMemo(
+    () =>
+      orderedAreas.reduce<[AreaConfig[], AreaConfig[]]>(
+        (columns, item, index) => {
+          columns[index % 2].push(item)
+          return columns
+        },
+        [[], []],
+      ),
+    [orderedAreas],
+  )
 
   async function refreshTasks() {
     try {
@@ -1350,32 +1361,36 @@ function App() {
 
       <div className="content-grid">
         <div className="main-lanes">
-          {orderedAreas.map((item) => (
-            <AreaSection
-              key={item.key}
-              area={item}
-              tasks={grouped[item.key] ?? []}
-              mode={mode}
-              isDragging={draggedArea === item.key}
-              isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
-              onChanged={refreshTasks}
-              onClearCompleted={clearUkgCompleted}
-              onClearProject={clearUkgProject}
-              onDragStart={setDraggedArea}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={dropArea}
-              onDragEnd={() => {
-                setDraggedArea(null)
-                setDraggedTaskId(null)
-              }}
-              draggedTaskId={draggedTaskId}
-              onTaskDragStart={(taskId) => {
-                setDraggedArea(null)
-                setDraggedTaskId(taskId)
-              }}
-              onTaskDragEnd={() => setDraggedTaskId(null)}
-              onTaskDrop={dropTask}
-            />
+          {areaColumns.map((column, index) => (
+            <div className="lane-column" key={`lane-column-${index}`}>
+              {column.map((item) => (
+                <AreaSection
+                  key={item.key}
+                  area={item}
+                  tasks={grouped[item.key] ?? []}
+                  mode={mode}
+                  isDragging={draggedArea === item.key}
+                  isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
+                  onChanged={refreshTasks}
+                  onClearCompleted={clearUkgCompleted}
+                  onClearProject={clearUkgProject}
+                  onDragStart={setDraggedArea}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={dropArea}
+                  onDragEnd={() => {
+                    setDraggedArea(null)
+                    setDraggedTaskId(null)
+                  }}
+                  draggedTaskId={draggedTaskId}
+                  onTaskDragStart={(taskId) => {
+                    setDraggedArea(null)
+                    setDraggedTaskId(taskId)
+                  }}
+                  onTaskDragEnd={() => setDraggedTaskId(null)}
+                  onTaskDrop={dropTask}
+                />
+              ))}
+            </div>
           ))}
         </div>
         <aside className="side-rail">

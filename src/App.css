@@ -234,7 +234,12 @@ button:disabled {
 .main-lanes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  gap: 14px;
+}
+
+.lane-column {
+  display: grid;
+  align-content: start;
   gap: 14px;
 }
 
@@ -684,6 +689,10 @@ button:disabled {
 
   .main-lanes {
     grid-template-columns: 1fr;
+  }
+
+  .lane-column {
+    display: contents;
   }
 
   .capture-controls {
