@@ -507,8 +507,28 @@ button:disabled {
 
 .task-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.move-task-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-right: auto;
+  color: #bdb5c9;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.move-task-control select {
+  width: auto;
+  min-height: 30px;
+  padding: 5px 26px 5px 9px;
+  font-size: 0.78rem;
 }
 
 .text-button {

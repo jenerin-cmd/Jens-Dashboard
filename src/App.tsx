@@ -653,6 +653,7 @@ function TaskCard({
   const [calendarMessage, setCalendarMessage] = useState('')
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(task.title)
+  const [areaDraft, setAreaDraft] = useState<AreaKey>(task.area)
   const progress =
     task.cost_estimate && task.cost_estimate > 0
       ? Math.min(((task.saved_amount ?? 0) / task.cost_estimate) * 100, 100)
@@ -680,6 +681,15 @@ function TaskCard({
 
     await updateTask(mode, task.id, { title: nextTitle })
     setEditing(false)
+    onChanged()
+  }
+
+  async function moveTask(nextArea: AreaKey) {
+    setAreaDraft(nextArea)
+    await updateTask(mode, task.id, {
+      area: nextArea,
+      notes: nextArea === 'ukg' ? task.notes : null,
+    })
     onChanged()
   }
 
@@ -799,6 +809,20 @@ function TaskCard({
       )}
 
       <div className="task-actions">
+        <label className="move-task-control">
+          <span>Move</span>
+          <select
+            value={areaDraft}
+            onChange={(event) => moveTask(event.target.value as AreaKey)}
+            aria-label="Move task to another section"
+          >
+            {areas.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
         {task.due_at ? (
           <button
             type="button"
