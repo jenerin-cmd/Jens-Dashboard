@@ -236,7 +236,11 @@ function cleanChecklistItem(value: string) {
 }
 
 function isProjectHeader(value: string) {
-  return !/^\s*(?:[-*•]|\d+[.)])\s*/.test(value) && /\bproject\b\s*:?\s*$/i.test(value.trim())
+  return /\bproject\b\s*:?\s*$/i.test(cleanChecklistItem(value))
+}
+
+function cleanProjectHeader(value: string) {
+  return cleanChecklistItem(value).replace(/:\s*$/, '').trim()
 }
 
 function buildTaskInputs(
@@ -272,7 +276,7 @@ function buildTaskInputs(
 
     for (const line of lines) {
       if (isProjectHeader(line)) {
-        currentProject = line.replace(/:\s*$/, '').trim()
+        currentProject = cleanProjectHeader(line)
         continue
       }
 
@@ -654,6 +658,7 @@ function TaskCard({
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(task.title)
   const [areaDraft, setAreaDraft] = useState<AreaKey>(task.area)
+  const [projectDraft, setProjectDraft] = useState(task.notes?.trim() || 'General')
   const progress =
     task.cost_estimate && task.cost_estimate > 0
       ? Math.min(((task.saved_amount ?? 0) / task.cost_estimate) * 100, 100)
@@ -690,6 +695,15 @@ function TaskCard({
       area: nextArea,
       notes: nextArea === 'ukg' ? task.notes : null,
     })
+    onChanged()
+  }
+
+  async function saveProject() {
+    if (task.area !== 'ukg') return
+
+    const nextProject = projectDraft.trim() || 'General'
+    setProjectDraft(nextProject)
+    await updateTask(mode, task.id, { notes: nextProject })
     onChanged()
   }
 
@@ -809,6 +823,17 @@ function TaskCard({
       )}
 
       <div className="task-actions">
+        {task.area === 'ukg' ? (
+          <label className="project-task-control">
+            <span>Project</span>
+            <input
+              value={projectDraft}
+              onBlur={saveProject}
+              onChange={(event) => setProjectDraft(event.target.value)}
+              aria-label="UKG project"
+            />
+          </label>
+        ) : null}
         <label className="move-task-control">
           <span>Move</span>
           <select
