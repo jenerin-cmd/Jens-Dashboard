@@ -21,6 +21,7 @@
 .top-widget,
 .capture-panel,
 .area-section,
+.month-calendar-panel,
 .side-rail > * {
   border: 1px solid rgba(255, 255, 255, 0.11);
   background: rgba(28, 20, 45, 0.76);
@@ -245,6 +246,20 @@ button:disabled {
   margin: 0 auto;
 }
 
+.board-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  max-width: 1220px;
+  margin: -6px auto 16px;
+}
+
+.board-actions .secondary-button {
+  width: auto;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
 .main-lanes {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -291,9 +306,22 @@ button:disabled {
   color: #9ee7d9;
 }
 
-.drag-handle {
+.drag-handle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   grid-row: span 2;
+  width: 22px;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #8f7fa5;
+  cursor: grab;
+}
+
+.drag-handle-button:active {
+  cursor: grabbing;
 }
 
 .area-heading strong,
@@ -630,6 +658,71 @@ button:disabled {
   gap: 14px;
 }
 
+.month-calendar-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.panel-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.panel-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+}
+
+.panel-heading svg {
+  color: #9ee7d9;
+}
+
+.panel-heading small {
+  color: #a897bd;
+  font-weight: 700;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.weekday,
+.month-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.weekday {
+  color: #9ee7d9;
+}
+
+.month-day {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5efff;
+}
+
+.month-day.blank {
+  border-color: transparent;
+  background: transparent;
+}
+
+.month-day.today {
+  background: linear-gradient(135deg, #ff8fc8, #9ee7d9);
+  color: #1b1029;
+}
+
 .auth-panel,
 .system-note {
   display: grid;
@@ -715,5 +808,14 @@ button:disabled {
 
   .capture-controls {
     grid-template-columns: 1fr;
+  }
+
+  .board-actions {
+    justify-content: stretch;
+    flex-direction: column;
+  }
+
+  .board-actions .secondary-button {
+    width: 100%;
   }
 }

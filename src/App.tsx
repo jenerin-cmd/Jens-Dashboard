@@ -2,6 +2,7 @@ import {
   Banknote,
   Bell,
   BriefcaseBusiness,
+  CalendarDays,
   CalendarPlus,
   Check,
   ChevronRight,
@@ -27,6 +28,7 @@ import {
   Sun,
   Target,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -36,10 +38,12 @@ import { buildGoogleCalendarUrl, createGoogleCalendarEvent } from './lib/calenda
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import {
   addTask,
+  clearDoneTasks,
   clearCompletedTasks,
   clearProjectTasks,
   deleteTask,
   listTasks,
+  restoreTasks,
   subscribeToTasks,
   syncLocalTasksToSupabase,
   updateTask,
@@ -119,6 +123,11 @@ type WeatherState = {
   wind: number
   description: string
   code: number
+}
+
+type UndoAction = {
+  label: string
+  run: () => Promise<void>
 }
 
 function normalizeAreaOrder(value: unknown) {
@@ -282,6 +291,19 @@ function formatDueDate(task: DashboardTask) {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+function getMonthDays(date: Date) {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const leadingBlanks = firstDay.getDay()
+
+  return [
+    ...Array.from({ length: leadingBlanks }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ]
 }
 
 function cleanChecklistItem(value: string) {
@@ -708,20 +730,65 @@ function WeatherWidget() {
   )
 }
 
+function MonthCalendar() {
+  const today = new Date()
+  const monthLabel = today.toLocaleDateString([], {
+    month: 'long',
+    year: 'numeric',
+  })
+  const currentDay = today.getDate()
+  const days = getMonthDays(today)
+
+  return (
+    <div className="month-calendar-panel">
+      <div className="panel-heading">
+        <span>
+          <CalendarDays size={17} />
+          <strong>{monthLabel}</strong>
+        </span>
+        <small>Today is highlighted</small>
+      </div>
+      <div className="month-grid" aria-label={`${monthLabel} calendar`}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+          <span className="weekday" key={`${day}-${index}`}>
+            {day}
+          </span>
+        ))}
+        {days.map((day, index) =>
+          day ? (
+            <span
+              className={day === currentDay ? 'month-day today' : 'month-day'}
+              key={`${monthLabel}-${day}`}
+            >
+              {day}
+            </span>
+          ) : (
+            <span className="month-day blank" key={`blank-${index}`} />
+          ),
+        )}
+      </div>
+    </div>
+  )
+}
+
 function TaskCard({
   task,
-  mode,
-  onChanged,
   hideNotes,
   isTaskDragging,
+  onPatchTask,
+  onDeleteTask,
   onTaskDragStart,
   onTaskDragEnd,
 }: {
   task: DashboardTask
-  mode: StoreMode
-  onChanged: () => void
   hideNotes?: boolean
   isTaskDragging: boolean
+  onPatchTask: (
+    task: DashboardTask,
+    patch: Partial<DashboardTask>,
+    label: string,
+  ) => Promise<void>
+  onDeleteTask: (task: DashboardTask) => Promise<void>
   onTaskDragStart: (taskId: string) => void
   onTaskDragEnd: () => void
 }) {
@@ -738,18 +805,16 @@ function TaskCard({
       : 0
 
   async function saveMoney() {
-    await updateTask(mode, task.id, {
+    await onPatchTask(task, {
       cost_estimate: cost ? Number(cost) : null,
       saved_amount: saved ? Number(saved) : null,
-    })
-    onChanged()
+    }, 'Undo money update')
   }
 
   async function markDone() {
-    await updateTask(mode, task.id, {
+    await onPatchTask(task, {
       status: task.status === 'done' ? 'active' : 'done',
-    })
-    onChanged()
+    }, task.status === 'done' ? 'Undo reopen task' : 'Undo complete task')
   }
 
   async function saveTitle(event: FormEvent) {
@@ -757,9 +822,8 @@ function TaskCard({
     const nextTitle = titleDraft.trim()
     if (!nextTitle) return
 
-    await updateTask(mode, task.id, { title: nextTitle })
+    await onPatchTask(task, { title: nextTitle }, 'Undo title edit')
     setEditing(false)
-    onChanged()
   }
 
   async function saveProject() {
@@ -767,8 +831,7 @@ function TaskCard({
 
     const nextProject = projectDraft.trim() || 'General'
     setProjectDraft(nextProject)
-    await updateTask(mode, task.id, { notes: nextProject })
-    onChanged()
+    await onPatchTask(task, { notes: nextProject }, 'Undo project change')
   }
 
   async function createCalendarEvent() {
@@ -923,8 +986,7 @@ function TaskCard({
           type="button"
           className="icon-button"
           onClick={async () => {
-            await deleteTask(mode, task.id)
-            onChanged()
+            await onDeleteTask(task)
           }}
           aria-label="Delete task"
         >
@@ -939,10 +1001,8 @@ function TaskCard({
 function AreaSection({
   area,
   tasks,
-  mode,
   isDragging,
   isTaskDropTarget,
-  onChanged,
   onClearCompleted,
   onClearProject,
   onDragStart,
@@ -950,16 +1010,17 @@ function AreaSection({
   onDrop,
   onDragEnd,
   draggedTaskId,
+  onPatchTask,
+  onDeleteTask,
   onTaskDragStart,
   onTaskDragEnd,
   onTaskDrop,
+  onProjectTaskDrop,
 }: {
   area: AreaConfig
   tasks: DashboardTask[]
-  mode: StoreMode
   isDragging: boolean
   isTaskDropTarget: boolean
-  onChanged: () => void
   onClearCompleted: () => void
   onClearProject: (project: string) => void
   onDragStart: (area: AreaKey) => void
@@ -967,9 +1028,16 @@ function AreaSection({
   onDrop: (area: AreaKey) => void
   onDragEnd: () => void
   draggedTaskId: string | null
+  onPatchTask: (
+    task: DashboardTask,
+    patch: Partial<DashboardTask>,
+    label: string,
+  ) => Promise<void>
+  onDeleteTask: (task: DashboardTask) => Promise<void>
   onTaskDragStart: (taskId: string) => void
   onTaskDragEnd: () => void
   onTaskDrop: (area: AreaKey) => void
+  onProjectTaskDrop: (project: string) => void
 }) {
   const Icon = area.icon
   const doneCount = tasks.filter((task) => task.status === 'done').length
@@ -1005,12 +1073,6 @@ function AreaSection({
   return (
     <section
       className={`area-section area-${area.key} ${isDragging ? 'dragging' : ''} ${isTaskDropTarget ? 'task-drop-target' : ''}`}
-      draggable={!draggedTaskId}
-      onDragStart={(event) => {
-        if (draggedTaskId) return
-        onDragStart(area.key)
-        event.dataTransfer.effectAllowed = 'move'
-      }}
       onDragOver={(event) => {
         event.preventDefault()
         if (draggedTaskId) {
@@ -1031,7 +1093,19 @@ function AreaSection({
     >
       <div className="area-heading">
         <span>
-          <GripVertical className="drag-handle" size={17} aria-hidden="true" />
+          <button
+            type="button"
+            className="drag-handle-button"
+            draggable={!draggedTaskId}
+            onDragStart={(event) => {
+              event.stopPropagation()
+              onDragStart(area.key)
+              event.dataTransfer.effectAllowed = 'move'
+            }}
+            aria-label={`Move ${area.label} tile`}
+          >
+            <GripVertical size={17} aria-hidden="true" />
+          </button>
           <Icon size={18} />
           <strong>{area.label}</strong>
           <small>{area.short}</small>
@@ -1062,6 +1136,17 @@ function AreaSection({
                   type="button"
                   className="project-toggle"
                   onClick={() => toggleProject(group.project)}
+                  onDragOver={(event) => {
+                    if (!draggedTaskId) return
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={(event) => {
+                    if (!draggedTaskId) return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onProjectTaskDrop(group.project)
+                  }}
                   aria-expanded={!collapsedProjects.has(group.project)}
                 >
                   <strong>{group.project}</strong>
@@ -1086,10 +1171,10 @@ function AreaSection({
                     <TaskCard
                       key={task.id}
                       task={task}
-                      mode={mode}
                       hideNotes
-                      onChanged={onChanged}
                       isTaskDragging={draggedTaskId === task.id}
+                      onPatchTask={onPatchTask}
+                      onDeleteTask={onDeleteTask}
                       onTaskDragStart={onTaskDragStart}
                       onTaskDragEnd={onTaskDragEnd}
                     />
@@ -1103,9 +1188,9 @@ function AreaSection({
             <TaskCard
               key={task.id}
               task={task}
-              mode={mode}
-              onChanged={onChanged}
               isTaskDragging={draggedTaskId === task.id}
+              onPatchTask={onPatchTask}
+              onDeleteTask={onDeleteTask}
               onTaskDragStart={onTaskDragStart}
               onTaskDragEnd={onTaskDragEnd}
             />
@@ -1132,6 +1217,7 @@ function App() {
   const [areaOrder, setAreaOrder] = useState<AreaKey[]>(readAreaOrder)
   const [draggedArea, setDraggedArea] = useState<AreaKey | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [undoAction, setUndoAction] = useState<UndoAction | null>(null)
   const [hasSupabaseSession, setHasSupabaseSession] = useState(false)
 
   const mode: StoreMode =
@@ -1268,7 +1354,15 @@ function App() {
       : 'No open work pile is shouting. Add one clear next action when it shows up.'
 
   function updateAreaOrder(nextOrder: AreaKey[]) {
+    const previousOrder = areaOrder
     const normalized = normalizeAreaOrder(nextOrder)
+    setUndoAction({
+      label: 'Undo tile move',
+      run: async () => {
+        setAreaOrder(previousOrder)
+        saveAreaOrder(previousOrder)
+      },
+    })
     setAreaOrder(normalized)
     saveAreaOrder(normalized)
   }
@@ -1286,18 +1380,74 @@ function App() {
     setDraggedArea(null)
   }
 
-  async function dropTask(targetArea: AreaKey) {
+  function setTaskUndo(label: string, previousTasks: DashboardTask[]) {
+    if (!previousTasks.length) return
+
+    setUndoAction({
+      label,
+      run: async () => {
+        await restoreTasks(mode, previousTasks)
+        await refreshTasks()
+      },
+    })
+  }
+
+  async function undoLastAction() {
+    if (!undoAction) return
+
+    const action = undoAction
+    setUndoAction(null)
+    try {
+      setError('')
+      await action.run()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not undo that action.')
+    }
+  }
+
+  async function patchTaskWithUndo(
+    task: DashboardTask,
+    patch: Partial<DashboardTask>,
+    label: string,
+  ) {
+    try {
+      setError('')
+      setTaskUndo(label, [task])
+      await updateTask(mode, task.id, patch)
+      await refreshTasks()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not update task.')
+    }
+  }
+
+  async function deleteTaskWithUndo(task: DashboardTask) {
+    try {
+      setError('')
+      setTaskUndo('Undo delete task', [task])
+      await deleteTask(mode, task.id)
+      await refreshTasks()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not delete task.')
+    }
+  }
+
+  async function dropTask(targetArea: AreaKey, project?: string) {
     if (!draggedTaskId) return
 
     const task = tasks.find((item) => item.id === draggedTaskId)
     setDraggedTaskId(null)
-    if (!task || task.area === targetArea) return
+    if (!task) return
+
+    const nextNotes =
+      targetArea === 'ukg' ? project ?? task.notes ?? 'General' : null
+    if (task.area === targetArea && task.notes === nextNotes) return
 
     try {
       setError('')
+      setTaskUndo('Undo task move', [task])
       await updateTask(mode, task.id, {
         area: targetArea,
-        notes: targetArea === 'ukg' ? task.notes || 'General' : null,
+        notes: nextNotes,
       })
       await refreshTasks()
     } catch (caught) {
@@ -1306,8 +1456,13 @@ function App() {
   }
 
   async function clearUkgCompleted() {
+    const previousTasks = tasks.filter(
+      (task) => task.area === 'ukg' && task.status === 'done',
+    )
+
     try {
       setError('')
+      setTaskUndo('Undo clear completed', previousTasks)
       await clearCompletedTasks(mode, 'ukg')
       await refreshTasks()
     } catch (caught) {
@@ -1318,12 +1473,34 @@ function App() {
   async function clearUkgProject(project: string) {
     if (!window.confirm(`Clear all visible tasks in ${project}?`)) return
 
+    const previousTasks = tasks.filter(
+      (task) =>
+        task.area === 'ukg' &&
+        (task.notes?.trim() || 'General') === project &&
+        (task.status === 'active' || task.status === 'done'),
+    )
+
     try {
       setError('')
+      setTaskUndo('Undo clear project', previousTasks)
       await clearProjectTasks(mode, project)
       await refreshTasks()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : `Could not clear ${project}.`)
+    }
+  }
+
+  async function dailyReset() {
+    const previousTasks = tasks.filter((task) => task.status === 'done')
+    if (!previousTasks.length) return
+
+    try {
+      setError('')
+      setTaskUndo('Undo daily reset', previousTasks)
+      await clearDoneTasks(mode)
+      await refreshTasks()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not reset completed tasks.')
     }
   }
 
@@ -1426,6 +1603,26 @@ function App() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {loading ? <div className="loading-row">Loading your dashboard...</div> : null}
+      <div className="board-actions">
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={undoLastAction}
+          disabled={!undoAction}
+        >
+          <Undo2 size={16} />
+          {undoAction?.label ?? 'Undo last action'}
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={dailyReset}
+          disabled={completedCount === 0}
+        >
+          <RotateCcw size={16} />
+          Daily reset completed
+        </button>
+      </div>
 
       <div className="content-grid">
         <div className="main-lanes">
@@ -1436,10 +1633,8 @@ function App() {
                   key={item.key}
                   area={item}
                   tasks={grouped[item.key] ?? []}
-                  mode={mode}
                   isDragging={draggedArea === item.key}
                   isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
-                  onChanged={refreshTasks}
                   onClearCompleted={clearUkgCompleted}
                   onClearProject={clearUkgProject}
                   onDragStart={setDraggedArea}
@@ -1450,26 +1645,23 @@ function App() {
                     setDraggedTaskId(null)
                   }}
                   draggedTaskId={draggedTaskId}
+                  onPatchTask={patchTaskWithUndo}
+                  onDeleteTask={deleteTaskWithUndo}
                   onTaskDragStart={(taskId) => {
                     setDraggedArea(null)
                     setDraggedTaskId(taskId)
                   }}
                   onTaskDragEnd={() => setDraggedTaskId(null)}
                   onTaskDrop={dropTask}
+                  onProjectTaskDrop={(project) => dropTask('ukg', project)}
                 />
               ))}
             </div>
           ))}
         </div>
         <aside className="side-rail">
+          <MonthCalendar />
           <AuthPanel syncNotice={syncNotice} onAuthChange={refreshTasks} />
-          <div className="system-note">
-            <strong>Calendar flow</strong>
-            <p>
-              Add a date and use Calendar to send it to Google Calendar.
-              Fantastical and Apple Calendar can display it from there.
-            </p>
-          </div>
         </aside>
       </div>
     </main>

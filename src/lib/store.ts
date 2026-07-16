@@ -139,6 +139,35 @@ export async function deleteTask(mode: StoreMode, id: string) {
   writeLocalTasks(readLocalTasks().filter((task) => task.id !== id))
 }
 
+export async function restoreTasks(mode: StoreMode, tasks: DashboardTask[]) {
+  if (!tasks.length) return
+
+  if (mode === 'supabase' && supabase) {
+    const client = supabase
+    const { data: userData, error: userError } = await client.auth.getUser()
+    if (userError) throw userError
+
+    const { error } = await client.from('dashboard_tasks').upsert(
+      tasks.map((task) => ({
+        ...task,
+        user_id: task.user_id ?? userData.user?.id,
+        updated_at: now(),
+      })),
+      { onConflict: 'id' },
+    )
+
+    if (error) throw error
+    return
+  }
+
+  const current = readLocalTasks()
+  const restoredIds = new Set(tasks.map((task) => task.id))
+  writeLocalTasks([
+    ...tasks.map((task) => ({ ...task, updated_at: now() })),
+    ...current.filter((task) => !restoredIds.has(task.id)),
+  ])
+}
+
 export async function clearCompletedTasks(mode: StoreMode, area: DashboardTask['area']) {
   if (mode === 'supabase' && supabase) {
     const client = supabase
@@ -154,6 +183,26 @@ export async function clearCompletedTasks(mode: StoreMode, area: DashboardTask['
 
   const tasks = readLocalTasks().map((task) =>
     task.area === area && task.status === 'done'
+      ? { ...task, status: 'cleared' as const, updated_at: now() }
+      : task,
+  )
+  writeLocalTasks(tasks)
+}
+
+export async function clearDoneTasks(mode: StoreMode) {
+  if (mode === 'supabase' && supabase) {
+    const client = supabase
+    const { error } = await client
+      .from('dashboard_tasks')
+      .update({ status: 'cleared', updated_at: now() })
+      .eq('status', 'done')
+
+    if (error) throw error
+    return
+  }
+
+  const tasks = readLocalTasks().map((task) =>
+    task.status === 'done'
       ? { ...task, status: 'cleared' as const, updated_at: now() }
       : task,
   )
