@@ -41,6 +41,7 @@ import {
   clearDoneTasks,
   clearCompletedTasks,
   clearProjectTasks,
+  copyCurrentSupabaseTasksToLocal,
   deleteTask,
   listTasks,
   restoreTasks,
@@ -117,6 +118,15 @@ const WEATHER_CACHE_KEY = 'jens-dashboard-weather-cache-v1'
 const POMODORO_SECONDS = 25 * 60
 const defaultAreaOrder = areas.map((item) => item.key)
 const rightRailAreaKeys = new Set<AreaKey>(['home', 'money'])
+
+type SyncUser = {
+  email?: string | null
+  is_anonymous?: boolean
+}
+
+function isCrossDeviceUser(user: SyncUser | null | undefined) {
+  return Boolean(user?.email && !user.is_anonymous)
+}
 
 type WeatherState = {
   name: string
@@ -431,15 +441,14 @@ function AuthPanel({
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null)
-  const [autoSynced, setAutoSynced] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
 
   async function refreshUser() {
     if (!supabase) return
 
     const { data } = await supabase.auth.getUser()
-    setSignedInEmail(data.user?.email ?? null)
-    setAutoSynced(Boolean(data.user && !data.user.email))
+    const user = data.user
+    setSignedInEmail(isCrossDeviceUser(user) ? user?.email ?? null : null)
   }
 
   useEffect(() => {
@@ -537,7 +546,6 @@ function AuthPanel({
       const { error } = await supabase.auth.signOut()
       setMessage(error ? error.message : 'Signed out.')
       setSignedInEmail(null)
-      setAutoSynced(false)
       onAuthChange()
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : 'Could not sign out.')
@@ -546,17 +554,15 @@ function AuthPanel({
     }
   }
 
-  const isSynced = Boolean(signedInEmail || autoSynced)
+  const isSynced = Boolean(signedInEmail)
 
   return (
     <div className="auth-panel">
       <div>
         <strong>Supabase sync</strong>
         <span>
-          {autoSynced
-            ? 'Synced automatically on this device.'
-            : signedInEmail
-            ? `Signed in as ${signedInEmail}.`
+          {signedInEmail
+            ? `Signed in as ${signedInEmail}. Syncing across devices.`
             : syncNotice
               ? syncNotice
             : hasSupabaseConfig
@@ -1271,7 +1277,7 @@ function App() {
     const unsubscribe =
       mode === 'supabase' ? subscribeToTasks(refreshTasks) : () => undefined
     const authSubscription = supabase?.auth.onAuthStateChange((_event, session) => {
-      setHasSupabaseSession(Boolean(session))
+      setHasSupabaseSession(isCrossDeviceUser(session?.user))
       refreshTasks()
     })
 
@@ -1288,25 +1294,51 @@ function App() {
     let cancelled = false
 
     async function activateSupabaseSession() {
-      const { data: sessionData } = await supabase!.auth.getSession()
+      const { data: sessionData, error } = await supabase!.auth.getSession()
       if (cancelled) return
 
-      if (sessionData.session) {
+      if (error) {
+        setSyncNotice('Saving on this device. Sign in again to sync across devices.')
+        return
+      }
+
+      const user = sessionData.session?.user
+      if (isCrossDeviceUser(user)) {
         setHasSupabaseSession(true)
         setSyncNotice('')
         return
       }
 
-      const { data, error } = await supabase!.auth.signInAnonymously()
-      if (cancelled) return
-
-      setHasSupabaseSession(Boolean(data.session))
-      if (data.session) setSyncNotice('')
-      if (error) {
-        setSyncNotice(
-          'Saving on this device. Supabase automatic sync needs anonymous sign-in enabled.',
-        )
+      if (user) {
+        try {
+          const importedCount = await copyCurrentSupabaseTasksToLocal()
+          await supabase!.auth.signOut()
+          if (cancelled) return
+          setHasSupabaseSession(false)
+          setSyncNotice(
+            importedCount > 0
+              ? 'Moved device-only items here. Sign in to sync them across iPad and laptop.'
+              : 'Sign in to sync across iPad and laptop.',
+          )
+          const next = await listTasks('local')
+          if (!cancelled) {
+            setTasks(next)
+            setLoading(false)
+          }
+        } catch (caught) {
+          if (cancelled) return
+          setSyncNotice('Sign in to sync across iPad and laptop.')
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : 'Could not move device-only items into local storage.',
+          )
+        }
+        return
       }
+
+      setHasSupabaseSession(false)
+      setSyncNotice('Sign in to sync across iPad and laptop.')
     }
 
     activateSupabaseSession()

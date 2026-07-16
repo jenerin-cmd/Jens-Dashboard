@@ -41,6 +41,18 @@ function writeLocalTasks(tasks: DashboardTask[]) {
   localStorage.setItem(LOCAL_KEY, JSON.stringify(tasks))
 }
 
+function taskSignature(task: DashboardTask) {
+  return [
+    task.title,
+    task.notes ?? '',
+    task.area,
+    task.priority,
+    task.status,
+    task.due_at ?? '',
+    task.created_at,
+  ].join('\u0000')
+}
+
 function isMissingAuth(error: unknown) {
   if (!error || typeof error !== 'object' || !('message' in error)) return false
   return String(error.message).toLowerCase().includes('auth session missing')
@@ -241,7 +253,7 @@ export async function syncLocalTasksToSupabase() {
 
   const client = supabase
   const { data: userData, error: userError } = await client.auth.getUser()
-  if (userError || !userData.user) return
+  if (userError || !userData.user?.email) return
 
   const { error } = await client.from('dashboard_tasks').upsert(
     localTasks.map((task) => ({
@@ -252,6 +264,33 @@ export async function syncLocalTasksToSupabase() {
   )
 
   if (error) throw error
+}
+
+export async function copyCurrentSupabaseTasksToLocal() {
+  if (!supabase) return 0
+
+  const { data, error } = await supabase
+    .from('dashboard_tasks')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+
+  const current = readLocalTasks()
+  const existingSignatures = new Set(current.map(taskSignature))
+  const imported = (data ?? [])
+    .filter((task) => !existingSignatures.has(taskSignature(task)))
+    .map((task) => ({
+      ...task,
+      id: crypto.randomUUID(),
+      user_id: null,
+      updated_at: now(),
+    }))
+
+  if (!imported.length) return 0
+
+  writeLocalTasks([...imported, ...current])
+  return imported.length
 }
 
 export function subscribeToTasks(onChange: () => void) {
