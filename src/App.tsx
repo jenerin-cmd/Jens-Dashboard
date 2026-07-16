@@ -109,6 +109,7 @@ const areas: AreaConfig[] = [
 const AUTH_COOLDOWN_KEY = 'jens-dashboard-auth-cooldown-until'
 const AREA_ORDER_KEY = 'jens-dashboard-area-order-v1'
 const WEATHER_LOCATION_KEY = 'jens-dashboard-weather-location'
+const WEATHER_CACHE_KEY = 'jens-dashboard-weather-cache-v1'
 const POMODORO_SECONDS = 25 * 60
 const defaultAreaOrder = areas.map((item) => item.key)
 
@@ -147,6 +148,25 @@ function getSavedWeatherLocation() {
   return localStorage.getItem(WEATHER_LOCATION_KEY) ?? '77082'
 }
 
+function getCachedWeather() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) ?? 'null') as
+      | { weather: WeatherState; savedAt: number }
+      | null
+    if (!cached || Date.now() - cached.savedAt > 6 * 60 * 60 * 1000) return null
+    return cached.weather
+  } catch {
+    return null
+  }
+}
+
+function saveCachedWeather(weather: WeatherState) {
+  localStorage.setItem(
+    WEATHER_CACHE_KEY,
+    JSON.stringify({ weather, savedAt: Date.now() }),
+  )
+}
+
 function weatherCodeDescription(code: number) {
   if (code === 0) return 'Clear'
   if ([1, 2, 3].includes(code)) return 'Partly cloudy'
@@ -176,15 +196,26 @@ function shortWeatherPlace(value: string) {
 async function geocodeLocation(location: string) {
   const trimmed = location.trim()
   if (/^\d{5}$/.test(trimmed)) {
-    const response = await fetch(`https://api.zippopotam.us/us/${trimmed}`)
-    if (!response.ok) throw new Error('Could not find that ZIP code.')
-    const data = await response.json()
-    const place = data.places?.[0]
-    if (!place) throw new Error('Could not find that ZIP code.')
-    return {
-      name: `${place['place name']}, ${place['state abbreviation']} ${trimmed}`,
-      latitude: Number(place.latitude),
-      longitude: Number(place.longitude),
+    try {
+      const response = await fetch(`https://api.zippopotam.us/us/${trimmed}`)
+      if (!response.ok) throw new Error('Could not find that ZIP code.')
+      const data = await response.json()
+      const place = data.places?.[0]
+      if (!place) throw new Error('Could not find that ZIP code.')
+      return {
+        name: `${place['place name']}, ${place['state abbreviation']} ${trimmed}`,
+        latitude: Number(place.latitude),
+        longitude: Number(place.longitude),
+      }
+    } catch (caught) {
+      if (trimmed === '77082') {
+        return {
+          name: 'Houston, TX 77082',
+          latitude: 29.7223,
+          longitude: -95.6285,
+        }
+      }
+      throw caught
     }
   }
 
@@ -593,7 +624,7 @@ function PomodoroWidget() {
 function WeatherWidget() {
   const [location, setLocation] = useState(getSavedWeatherLocation)
   const [draftLocation, setDraftLocation] = useState(getSavedWeatherLocation)
-  const [weather, setWeather] = useState<WeatherState | null>(null)
+  const [weather, setWeather] = useState<WeatherState | null>(getCachedWeather)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -611,16 +642,23 @@ function WeatherWidget() {
         if (!response.ok) throw new Error('Could not load weather.')
         const data = await response.json()
         if (cancelled) return
-        setWeather({
+        const nextWeather = {
           name: place.name,
           temperature: Math.round(data.current.temperature_2m),
           wind: Math.round(data.current.wind_speed_10m),
           description: weatherCodeDescription(data.current.weather_code),
           code: data.current.weather_code,
-        })
+        }
+        setWeather(nextWeather)
+        saveCachedWeather(nextWeather)
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : 'Could not load weather.')
+          setWeather((current) => current ?? getCachedWeather())
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : 'Could not refresh weather right now.',
+          )
         }
       } finally {
         if (!cancelled) setLoading(false)
