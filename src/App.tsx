@@ -450,6 +450,21 @@ function AuthPanel({
     return window.location.href.split('#')[0].split('?')[0]
   }
 
+  function normalizeEmail() {
+    return email.trim().toLowerCase()
+  }
+
+  function friendlyAuthError(errorMessage: string) {
+    const normalized = errorMessage.toLowerCase()
+    if (normalized.includes('invalid login credentials')) {
+      return 'That login did not match Supabase. Try Reset password below, then use the email link to set a fresh password.'
+    }
+    if (normalized.includes('email not confirmed')) {
+      return 'That account still needs email confirmation. Use the confirmation email, or send a password reset link below.'
+    }
+    return errorMessage
+  }
+
   function validateEmail(trimmedEmail: string) {
     if (!trimmedEmail) {
       setMessage('Enter your email first.')
@@ -509,7 +524,7 @@ function AuthPanel({
   async function signInWithPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const trimmedEmail = email.trim()
+    const trimmedEmail = normalizeEmail()
     if (!supabase) {
       setMessage('Supabase is not connected yet.')
       return
@@ -526,7 +541,7 @@ function AuthPanel({
       })
 
       if (error) {
-        setMessage(error.message)
+        setMessage(friendlyAuthError(error.message))
         return
       }
 
@@ -542,7 +557,7 @@ function AuthPanel({
   }
 
   async function createAccount() {
-    const trimmedEmail = email.trim()
+    const trimmedEmail = normalizeEmail()
     if (!supabase) {
       setMessage('Supabase is not connected yet.')
       return
@@ -560,7 +575,7 @@ function AuthPanel({
       })
 
       if (error) {
-        setMessage(error.message)
+        setMessage(friendlyAuthError(error.message))
         return
       }
 
@@ -581,8 +596,41 @@ function AuthPanel({
     }
   }
 
+  async function resetPassword() {
+    const trimmedEmail = normalizeEmail()
+    if (!supabase) {
+      setMessage('Supabase is not connected yet.')
+      return
+    }
+    if (!validateEmail(trimmedEmail)) return
+
+    setBusy(true)
+    setMessage(`Sending a password reset link to ${trimmedEmail}...`)
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: getAuthRedirectUrl(),
+      })
+
+      if (error) {
+        setMessage(friendlyAuthError(error.message))
+        return
+      }
+
+      setMessage('Check your email for a password reset link.')
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not send the password reset link.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function sendMagicLink() {
-    const trimmedEmail = email.trim()
+    const trimmedEmail = normalizeEmail()
     if (!supabase) {
       setMessage('Supabase is not connected yet.')
       return
@@ -610,7 +658,7 @@ function AuthPanel({
         setMessage(
           isRateLimit
             ? 'Supabase is rate-limiting sign-in emails. Wait a few minutes, then try again.'
-            : error.message,
+            : friendlyAuthError(error.message),
         )
         if (isRateLimit) startCooldown(300)
         return
@@ -702,6 +750,14 @@ function AuthPanel({
           >
             <UserPlus size={16} />
             Create account
+          </button>
+          <button
+            type="button"
+            className="text-button auth-link-button"
+            disabled={busy}
+            onClick={resetPassword}
+          >
+            Reset password
           </button>
           <button
             type="button"
