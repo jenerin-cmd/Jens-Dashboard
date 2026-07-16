@@ -5,6 +5,13 @@ import {
   CalendarPlus,
   Check,
   ChevronRight,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
   ClipboardList,
   Eraser,
   GripVertical,
@@ -17,6 +24,7 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  Sun,
   Target,
   Trash2,
   X,
@@ -109,6 +117,7 @@ type WeatherState = {
   temperature: number
   wind: number
   description: string
+  code: number
 }
 
 function normalizeAreaOrder(value: unknown) {
@@ -147,6 +156,21 @@ function weatherCodeDescription(code: number) {
   if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snow'
   if ([95, 96, 99].includes(code)) return 'Storms'
   return 'Weather'
+}
+
+function weatherIconForCode(code: number) {
+  if (code === 0) return Sun
+  if ([1, 2, 3].includes(code)) return CloudSun
+  if ([45, 48].includes(code)) return CloudFog
+  if ([51, 53, 55, 56, 57].includes(code)) return CloudDrizzle
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return CloudRain
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return CloudSnow
+  if ([95, 96, 99].includes(code)) return CloudLightning
+  return Cloud
+}
+
+function shortWeatherPlace(value: string) {
+  return value.replace(/\s+\d{5}$/, '')
 }
 
 async function geocodeLocation(location: string) {
@@ -592,6 +616,7 @@ function WeatherWidget() {
           temperature: Math.round(data.current.temperature_2m),
           wind: Math.round(data.current.wind_speed_10m),
           description: weatherCodeDescription(data.current.weather_code),
+          code: data.current.weather_code,
         })
       } catch (caught) {
         if (!cancelled) {
@@ -615,17 +640,22 @@ function WeatherWidget() {
     setLocation(draftLocation.trim())
   }
 
+  const WeatherIcon = weather ? weatherIconForCode(weather.code) : CloudSun
+
   return (
     <div className="top-widget weather-widget">
       <span>Weather</span>
-      {weather ? (
-        <strong>{weather.temperature}°</strong>
-      ) : (
-        <strong>{loading ? '...' : '--'}</strong>
-      )}
+      <div className="weather-current">
+        {weather ? (
+          <strong>{weather.temperature}°</strong>
+        ) : (
+          <strong>{loading ? '...' : '--'}</strong>
+        )}
+        <WeatherIcon size={54} strokeWidth={1.7} aria-hidden="true" />
+      </div>
       <p>
         {weather
-          ? `${weather.description} in ${weather.name}. Wind ${weather.wind} mph.`
+          ? `${weather.description} in ${shortWeatherPlace(weather.name)}. Wind ${weather.wind} mph.`
           : error || 'Loading weather.'}
       </p>
       <form onSubmit={saveLocation}>
@@ -1293,8 +1323,8 @@ function App() {
           <span>{new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</span>
           <h1>Jen's Dashboard</h1>
           <p>
-            One place to capture the swirl, protect the money moves, and keep
-            home goals visible without making your brain hold all of it.
+            Capture what needs doing, keep work and home tasks visible, and
+            make today easier to act on.
           </p>
         </div>
 

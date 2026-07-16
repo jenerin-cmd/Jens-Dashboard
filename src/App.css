@@ -46,8 +46,9 @@
 .title-block h1 {
   margin: 0 0 10px;
   color: #ffffff;
-  font-size: clamp(2.3rem, 6vw, 4.8rem);
-  line-height: 0.95;
+  font-size: 3.7rem;
+  line-height: 0.92;
+  overflow-wrap: anywhere;
 }
 
 .title-block p,
@@ -117,6 +118,19 @@
   color: #cfc2df;
   font-size: 0.86rem;
   line-height: 1.35;
+}
+
+.weather-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.weather-current svg {
+  flex: 0 0 auto;
+  color: #9ee7d9;
+  filter: drop-shadow(0 8px 20px rgba(158, 231, 217, 0.2));
 }
 
 .pomodoro-widget div,
@@ -685,6 +699,10 @@ button:disabled {
   .top-band,
   .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .title-block h1 {
+    font-size: 3rem;
   }
 
   .main-lanes {
