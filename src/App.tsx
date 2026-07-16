@@ -116,6 +116,7 @@ const WEATHER_LOCATION_KEY = 'jens-dashboard-weather-location'
 const WEATHER_CACHE_KEY = 'jens-dashboard-weather-cache-v1'
 const POMODORO_SECONDS = 25 * 60
 const defaultAreaOrder = areas.map((item) => item.key)
+const rightRailAreaKeys = new Set<AreaKey>(['home', 'money'])
 
 type WeatherState = {
   name: string
@@ -1233,16 +1234,24 @@ function App() {
         .filter((item): item is AreaConfig => Boolean(item)),
     [areaByKey, areaOrder],
   )
+  const mainAreas = useMemo(
+    () => orderedAreas.filter((item) => !rightRailAreaKeys.has(item.key)),
+    [orderedAreas],
+  )
+  const rightRailAreas = useMemo(
+    () => orderedAreas.filter((item) => rightRailAreaKeys.has(item.key)),
+    [orderedAreas],
+  )
   const areaColumns = useMemo(
     () =>
-      orderedAreas.reduce<[AreaConfig[], AreaConfig[]]>(
+      mainAreas.reduce<[AreaConfig[], AreaConfig[]]>(
         (columns, item, index) => {
           columns[index % 2].push(item)
           return columns
         },
         [[], []],
       ),
-    [orderedAreas],
+    [mainAreas],
   )
 
   async function refreshTasks() {
@@ -1531,6 +1540,37 @@ function App() {
     }
   }
 
+  function renderAreaSection(item: AreaConfig) {
+    return (
+      <AreaSection
+        key={item.key}
+        area={item}
+        tasks={grouped[item.key] ?? []}
+        isDragging={draggedArea === item.key}
+        isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
+        onClearCompleted={clearUkgCompleted}
+        onClearProject={clearUkgProject}
+        onDragStart={setDraggedArea}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={dropArea}
+        onDragEnd={() => {
+          setDraggedArea(null)
+          setDraggedTaskId(null)
+        }}
+        draggedTaskId={draggedTaskId}
+        onPatchTask={patchTaskWithUndo}
+        onDeleteTask={deleteTaskWithUndo}
+        onTaskDragStart={(taskId) => {
+          setDraggedArea(null)
+          setDraggedTaskId(taskId)
+        }}
+        onTaskDragEnd={() => setDraggedTaskId(null)}
+        onTaskDrop={dropTask}
+        onProjectTaskDrop={(project) => dropTask('ukg', project)}
+      />
+    )
+  }
+
   return (
     <main className="dashboard-shell">
       <section className="top-band">
@@ -1628,39 +1668,13 @@ function App() {
         <div className="main-lanes">
           {areaColumns.map((column, index) => (
             <div className="lane-column" key={`lane-column-${index}`}>
-              {column.map((item) => (
-                <AreaSection
-                  key={item.key}
-                  area={item}
-                  tasks={grouped[item.key] ?? []}
-                  isDragging={draggedArea === item.key}
-                  isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
-                  onClearCompleted={clearUkgCompleted}
-                  onClearProject={clearUkgProject}
-                  onDragStart={setDraggedArea}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={dropArea}
-                  onDragEnd={() => {
-                    setDraggedArea(null)
-                    setDraggedTaskId(null)
-                  }}
-                  draggedTaskId={draggedTaskId}
-                  onPatchTask={patchTaskWithUndo}
-                  onDeleteTask={deleteTaskWithUndo}
-                  onTaskDragStart={(taskId) => {
-                    setDraggedArea(null)
-                    setDraggedTaskId(taskId)
-                  }}
-                  onTaskDragEnd={() => setDraggedTaskId(null)}
-                  onTaskDrop={dropTask}
-                  onProjectTaskDrop={(project) => dropTask('ukg', project)}
-                />
-              ))}
+              {column.map((item) => renderAreaSection(item))}
             </div>
           ))}
         </div>
         <aside className="side-rail">
           <MonthCalendar />
+          {rightRailAreas.map((item) => renderAreaSection(item))}
           <AuthPanel syncNotice={syncNotice} onAuthChange={refreshTasks} />
         </aside>
       </div>
