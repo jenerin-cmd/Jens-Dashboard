@@ -645,11 +645,17 @@ function TaskCard({
   mode,
   onChanged,
   hideNotes,
+  isTaskDragging,
+  onTaskDragStart,
+  onTaskDragEnd,
 }: {
   task: DashboardTask
   mode: StoreMode
   onChanged: () => void
   hideNotes?: boolean
+  isTaskDragging: boolean
+  onTaskDragStart: (taskId: string) => void
+  onTaskDragEnd: () => void
 }) {
   const [cost, setCost] = useState(task.cost_estimate?.toString() ?? '')
   const [saved, setSaved] = useState(task.saved_amount?.toString() ?? '')
@@ -657,7 +663,6 @@ function TaskCard({
   const [calendarMessage, setCalendarMessage] = useState('')
   const [editing, setEditing] = useState(false)
   const [titleDraft, setTitleDraft] = useState(task.title)
-  const [areaDraft, setAreaDraft] = useState<AreaKey>(task.area)
   const [projectDraft, setProjectDraft] = useState(task.notes?.trim() || 'General')
   const progress =
     task.cost_estimate && task.cost_estimate > 0
@@ -686,15 +691,6 @@ function TaskCard({
 
     await updateTask(mode, task.id, { title: nextTitle })
     setEditing(false)
-    onChanged()
-  }
-
-  async function moveTask(nextArea: AreaKey) {
-    setAreaDraft(nextArea)
-    await updateTask(mode, task.id, {
-      area: nextArea,
-      notes: nextArea === 'ukg' ? task.notes : null,
-    })
     onChanged()
   }
 
@@ -729,7 +725,17 @@ function TaskCard({
   }
 
   return (
-    <article className={`task-card ${task.status === 'done' ? 'done' : ''}`}>
+    <article
+      className={`task-card ${task.status === 'done' ? 'done' : ''} ${isTaskDragging ? 'task-dragging' : ''}`}
+      draggable
+      onDragStart={(event) => {
+        event.stopPropagation()
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('text/plain', task.id)
+        onTaskDragStart(task.id)
+      }}
+      onDragEnd={onTaskDragEnd}
+    >
       <div className="task-main">
         <button
           type="button"
@@ -834,20 +840,6 @@ function TaskCard({
             />
           </label>
         ) : null}
-        <label className="move-task-control">
-          <span>Move</span>
-          <select
-            value={areaDraft}
-            onChange={(event) => moveTask(event.target.value as AreaKey)}
-            aria-label="Move task to another section"
-          >
-            {areas.map((item) => (
-              <option key={item.key} value={item.key}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
         {task.due_at ? (
           <button
             type="button"
@@ -881,6 +873,7 @@ function AreaSection({
   tasks,
   mode,
   isDragging,
+  isTaskDropTarget,
   onChanged,
   onClearCompleted,
   onClearProject,
@@ -888,11 +881,16 @@ function AreaSection({
   onDragOver,
   onDrop,
   onDragEnd,
+  draggedTaskId,
+  onTaskDragStart,
+  onTaskDragEnd,
+  onTaskDrop,
 }: {
   area: AreaConfig
   tasks: DashboardTask[]
   mode: StoreMode
   isDragging: boolean
+  isTaskDropTarget: boolean
   onChanged: () => void
   onClearCompleted: () => void
   onClearProject: (project: string) => void
@@ -900,6 +898,10 @@ function AreaSection({
   onDragOver: (event: DragEvent<HTMLElement>) => void
   onDrop: (area: AreaKey) => void
   onDragEnd: () => void
+  draggedTaskId: string | null
+  onTaskDragStart: (taskId: string) => void
+  onTaskDragEnd: () => void
+  onTaskDrop: (area: AreaKey) => void
 }) {
   const Icon = area.icon
   const doneCount = tasks.filter((task) => task.status === 'done').length
@@ -934,11 +936,29 @@ function AreaSection({
 
   return (
     <section
-      className={`area-section area-${area.key} ${isDragging ? 'dragging' : ''}`}
-      draggable
-      onDragStart={() => onDragStart(area.key)}
-      onDragOver={onDragOver}
-      onDrop={() => onDrop(area.key)}
+      className={`area-section area-${area.key} ${isDragging ? 'dragging' : ''} ${isTaskDropTarget ? 'task-drop-target' : ''}`}
+      draggable={!draggedTaskId}
+      onDragStart={(event) => {
+        if (draggedTaskId) return
+        onDragStart(area.key)
+        event.dataTransfer.effectAllowed = 'move'
+      }}
+      onDragOver={(event) => {
+        event.preventDefault()
+        if (draggedTaskId) {
+          event.dataTransfer.dropEffect = 'move'
+          return
+        }
+        onDragOver(event)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        if (draggedTaskId) {
+          onTaskDrop(area.key)
+          return
+        }
+        onDrop(area.key)
+      }}
       onDragEnd={onDragEnd}
     >
       <div className="area-heading">
@@ -1001,6 +1021,9 @@ function AreaSection({
                       mode={mode}
                       hideNotes
                       onChanged={onChanged}
+                      isTaskDragging={draggedTaskId === task.id}
+                      onTaskDragStart={onTaskDragStart}
+                      onTaskDragEnd={onTaskDragEnd}
                     />
                   ))}
                 </div>
@@ -1014,6 +1037,9 @@ function AreaSection({
               task={task}
               mode={mode}
               onChanged={onChanged}
+              isTaskDragging={draggedTaskId === task.id}
+              onTaskDragStart={onTaskDragStart}
+              onTaskDragEnd={onTaskDragEnd}
             />
           ))
         ) : (
@@ -1037,6 +1063,7 @@ function App() {
   const [syncNotice, setSyncNotice] = useState('')
   const [areaOrder, setAreaOrder] = useState<AreaKey[]>(readAreaOrder)
   const [draggedArea, setDraggedArea] = useState<AreaKey | null>(null)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [hasSupabaseSession, setHasSupabaseSession] = useState(false)
 
   const mode: StoreMode =
@@ -1180,6 +1207,25 @@ function App() {
     setDraggedArea(null)
   }
 
+  async function dropTask(targetArea: AreaKey) {
+    if (!draggedTaskId) return
+
+    const task = tasks.find((item) => item.id === draggedTaskId)
+    setDraggedTaskId(null)
+    if (!task || task.area === targetArea) return
+
+    try {
+      setError('')
+      await updateTask(mode, task.id, {
+        area: targetArea,
+        notes: targetArea === 'ukg' ? task.notes || 'General' : null,
+      })
+      await refreshTasks()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not move task.')
+    }
+  }
+
   async function clearUkgCompleted() {
     try {
       setError('')
@@ -1311,13 +1357,24 @@ function App() {
               tasks={grouped[item.key] ?? []}
               mode={mode}
               isDragging={draggedArea === item.key}
+              isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
               onChanged={refreshTasks}
               onClearCompleted={clearUkgCompleted}
               onClearProject={clearUkgProject}
               onDragStart={setDraggedArea}
               onDragOver={(event) => event.preventDefault()}
               onDrop={dropArea}
-              onDragEnd={() => setDraggedArea(null)}
+              onDragEnd={() => {
+                setDraggedArea(null)
+                setDraggedTaskId(null)
+              }}
+              draggedTaskId={draggedTaskId}
+              onTaskDragStart={(taskId) => {
+                setDraggedArea(null)
+                setDraggedTaskId(taskId)
+              }}
+              onTaskDragEnd={() => setDraggedTaskId(null)}
+              onTaskDrop={dropTask}
             />
           ))}
         </div>

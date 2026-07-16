@@ -308,6 +308,15 @@ button:disabled {
   opacity: 0.58;
 }
 
+.area-section.task-drop-target {
+  outline: 2px solid rgba(158, 231, 217, 0.62);
+  outline-offset: 3px;
+}
+
+.area-section.task-drop-target .task-list {
+  background: rgba(158, 231, 217, 0.06);
+}
+
 .count-pill,
 .due-pill {
   display: inline-flex;
@@ -407,6 +416,16 @@ button:disabled {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
   background: rgba(10, 7, 18, 0.42);
+  cursor: grab;
+}
+
+.task-card:active {
+  cursor: grabbing;
+}
+
+.task-card.task-dragging {
+  opacity: 0.5;
+  outline: 2px solid rgba(158, 231, 217, 0.45);
 }
 
 .task-card.done {
@@ -513,7 +532,6 @@ button:disabled {
   flex-wrap: wrap;
 }
 
-.move-task-control,
 .project-task-control {
   display: inline-flex;
   align-items: center;
@@ -524,19 +542,9 @@ button:disabled {
   font-weight: 800;
 }
 
-.move-task-control {
-  margin-right: auto;
-}
-
 .project-task-control {
+  margin-right: auto;
   flex: 1 1 160px;
-}
-
-.move-task-control select {
-  width: auto;
-  min-height: 30px;
-  padding: 5px 26px 5px 9px;
-  font-size: 0.78rem;
 }
 
 .project-task-control input {
