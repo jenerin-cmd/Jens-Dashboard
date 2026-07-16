@@ -745,6 +745,21 @@ button:disabled {
   width: 100%;
 }
 
+.password-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+}
+
+.password-field input {
+  min-width: 0;
+}
+
+.password-field .icon-button {
+  width: 42px;
+  min-height: 42px;
+}
+
 .auth-link-button {
   min-height: auto;
   padding: 4px 0;

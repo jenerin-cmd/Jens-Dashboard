@@ -15,6 +15,8 @@ import {
   CloudSun,
   ClipboardList,
   Eraser,
+  Eye,
+  EyeOff,
   GripVertical,
   Home,
   KeyRound,
@@ -443,6 +445,7 @@ function AuthPanel({
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
 
@@ -457,10 +460,10 @@ function AuthPanel({
   function friendlyAuthError(errorMessage: string) {
     const normalized = errorMessage.toLowerCase()
     if (normalized.includes('invalid login credentials')) {
-      return 'That login did not match Supabase. Try Reset password below, then use the email link to set a fresh password.'
+      return 'Supabase did not match that login. Check the exact signed-in email shown on the iPad, then use that same email here.'
     }
     if (normalized.includes('email not confirmed')) {
-      return 'That account still needs email confirmation. Use the confirmation email, or send a password reset link below.'
+      return 'That account still needs email confirmation. Use the confirmation email once, then log in here with the same password.'
     }
     return errorMessage
   }
@@ -596,39 +599,6 @@ function AuthPanel({
     }
   }
 
-  async function resetPassword() {
-    const trimmedEmail = normalizeEmail()
-    if (!supabase) {
-      setMessage('Supabase is not connected yet.')
-      return
-    }
-    if (!validateEmail(trimmedEmail)) return
-
-    setBusy(true)
-    setMessage(`Sending a password reset link to ${trimmedEmail}...`)
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: getAuthRedirectUrl(),
-      })
-
-      if (error) {
-        setMessage(friendlyAuthError(error.message))
-        return
-      }
-
-      setMessage('Check your email for a password reset link.')
-    } catch (caught) {
-      setMessage(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not send the password reset link.',
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function sendMagicLink() {
     const trimmedEmail = normalizeEmail()
     if (!supabase) {
@@ -727,14 +697,25 @@ function AuthPanel({
             disabled={busy}
             onChange={(event) => setEmail(event.target.value)}
           />
-          <input
-            type="password"
-            value={password}
-            placeholder="Password"
-            autoComplete="current-password"
-            disabled={busy}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <div className="password-field">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              placeholder="Password"
+              autoComplete="current-password"
+              disabled={busy}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              onClick={() => setShowPassword((value) => !value)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           <button
             type="submit"
             disabled={busy}
@@ -750,14 +731,6 @@ function AuthPanel({
           >
             <UserPlus size={16} />
             Create account
-          </button>
-          <button
-            type="button"
-            className="text-button auth-link-button"
-            disabled={busy}
-            onClick={resetPassword}
-          >
-            Reset password
           </button>
           <button
             type="button"
