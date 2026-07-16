@@ -160,6 +160,30 @@ export async function clearCompletedTasks(mode: StoreMode, area: DashboardTask['
   writeLocalTasks(tasks)
 }
 
+export async function clearProjectTasks(mode: StoreMode, project: string) {
+  if (mode === 'supabase' && supabase) {
+    const client = supabase
+    const { error } = await client
+      .from('dashboard_tasks')
+      .update({ status: 'cleared', updated_at: now() })
+      .eq('area', 'ukg')
+      .eq('notes', project)
+      .in('status', ['active', 'done'])
+
+    if (error) throw error
+    return
+  }
+
+  const tasks = readLocalTasks().map((task) =>
+    task.area === 'ukg' &&
+    (task.notes?.trim() || 'General') === project &&
+    (task.status === 'active' || task.status === 'done')
+      ? { ...task, status: 'cleared' as const, updated_at: now() }
+      : task,
+  )
+  writeLocalTasks(tasks)
+}
+
 export async function syncLocalTasksToSupabase() {
   if (!supabase) return
 

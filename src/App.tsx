@@ -30,6 +30,7 @@ import { hasSupabaseConfig, supabase } from './lib/supabase'
 import {
   addTask,
   clearCompletedTasks,
+  clearProjectTasks,
   deleteTask,
   listTasks,
   subscribeToTasks,
@@ -834,6 +835,7 @@ function AreaSection({
   isDragging,
   onChanged,
   onClearCompleted,
+  onClearProject,
   onDragStart,
   onDragOver,
   onDrop,
@@ -845,6 +847,7 @@ function AreaSection({
   isDragging: boolean
   onChanged: () => void
   onClearCompleted: () => void
+  onClearProject: (project: string) => void
   onDragStart: (area: AreaKey) => void
   onDragOver: (event: DragEvent<HTMLElement>) => void
   onDrop: (area: AreaKey) => void
@@ -918,19 +921,29 @@ function AreaSection({
         {area.key === 'ukg' && ukgProjects.length ? (
           ukgProjects.map((group) => (
             <div className="project-group" key={group.project}>
-              <button
-                type="button"
-                className="project-heading"
-                onClick={() => toggleProject(group.project)}
-                aria-expanded={!collapsedProjects.has(group.project)}
-              >
-                <strong>{group.project}</strong>
-                <span>
-                  <ChevronRight size={15} />
-                  {group.tasks.filter((task) => task.status === 'done').length}/
-                  {group.tasks.length}
-                </span>
-              </button>
+              <div className="project-heading">
+                <button
+                  type="button"
+                  className="project-toggle"
+                  onClick={() => toggleProject(group.project)}
+                  aria-expanded={!collapsedProjects.has(group.project)}
+                >
+                  <strong>{group.project}</strong>
+                  <span>
+                    <ChevronRight size={15} />
+                    {group.tasks.filter((task) => task.status === 'done').length}/
+                    {group.tasks.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="project-clear-button"
+                  onClick={() => onClearProject(group.project)}
+                  aria-label={`Clear ${group.project}`}
+                >
+                  <Eraser size={14} />
+                </button>
+              </div>
               {!collapsedProjects.has(group.project) ? (
                 <div className="project-items">
                   {group.tasks.map((task) => (
@@ -1130,6 +1143,18 @@ function App() {
     }
   }
 
+  async function clearUkgProject(project: string) {
+    if (!window.confirm(`Clear all visible tasks in ${project}?`)) return
+
+    try {
+      setError('')
+      await clearProjectTasks(mode, project)
+      await refreshTasks()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `Could not clear ${project}.`)
+    }
+  }
+
   async function handleAddTask(event: FormEvent) {
     event.preventDefault()
     if (!draft.trim()) return
@@ -1241,6 +1266,7 @@ function App() {
               isDragging={draggedArea === item.key}
               onChanged={refreshTasks}
               onClearCompleted={clearUkgCompleted}
+              onClearProject={clearUkgProject}
               onDragStart={setDraggedArea}
               onDragOver={(event) => event.preventDefault()}
               onDrop={dropArea}

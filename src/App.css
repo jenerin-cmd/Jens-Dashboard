@@ -345,12 +345,25 @@ button:disabled {
   color: #ffffff;
 }
 
-.project-heading strong {
+.project-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.project-toggle strong {
   min-width: 0;
   font-size: 0.92rem;
 }
 
-.project-heading span {
+.project-toggle span {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -360,8 +373,26 @@ button:disabled {
   font-weight: 800;
 }
 
-.project-heading[aria-expanded="true"] span svg {
+.project-toggle[aria-expanded="true"] span svg {
   transform: rotate(90deg);
+}
+
+.project-clear-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #d8d3e6;
+}
+
+.project-clear-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
 }
 
 .project-items {
