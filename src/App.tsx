@@ -17,6 +17,7 @@ import {
   Eraser,
   GripVertical,
   Home,
+  KeyRound,
   Loader2,
   LogOut,
   Pause,
@@ -29,6 +30,7 @@ import {
   Target,
   Trash2,
   Undo2,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -438,10 +440,35 @@ function AuthPanel({
   onAuthChange: () => void
 }) {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
+
+  function getAuthRedirectUrl() {
+    return window.location.href.split('#')[0].split('?')[0]
+  }
+
+  function validateEmail(trimmedEmail: string) {
+    if (!trimmedEmail) {
+      setMessage('Enter your email first.')
+      return false
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setMessage('Enter a valid email address.')
+      return false
+    }
+    return true
+  }
+
+  function validatePassword() {
+    if (password.length < 6) {
+      setMessage('Password needs at least 6 characters.')
+      return false
+    }
+    return true
+  }
 
   async function refreshUser() {
     if (!supabase) return
@@ -479,7 +506,7 @@ function AuthPanel({
     setCooldownSeconds(seconds)
   }
 
-  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
+  async function signInWithPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const trimmedEmail = email.trim()
@@ -487,14 +514,81 @@ function AuthPanel({
       setMessage('Supabase is not connected yet.')
       return
     }
-    if (!trimmedEmail) {
-      setMessage('Enter your email first.')
+    if (!validateEmail(trimmedEmail) || !validatePassword()) return
+
+    setBusy(true)
+    setMessage(`Signing in as ${trimmedEmail}...`)
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      })
+
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+
+      setMessage('Signed in. Sync is on.')
+      setPassword('')
+      onAuthChange()
+      await refreshUser()
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : 'Could not sign in.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createAccount() {
+    const trimmedEmail = email.trim()
+    if (!supabase) {
+      setMessage('Supabase is not connected yet.')
       return
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setMessage('Enter a valid email address.')
+    if (!validateEmail(trimmedEmail) || !validatePassword()) return
+
+    setBusy(true)
+    setMessage(`Creating account for ${trimmedEmail}...`)
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: { emailRedirectTo: getAuthRedirectUrl() },
+      })
+
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+
+      setMessage(
+        data.session
+          ? 'Account created. Sync is on.'
+          : 'Account created. If Supabase asks to confirm it, use the email link once.',
+      )
+      if (data.session) {
+        setPassword('')
+        onAuthChange()
+        await refreshUser()
+      }
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : 'Could not create account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function sendMagicLink() {
+    const trimmedEmail = email.trim()
+    if (!supabase) {
+      setMessage('Supabase is not connected yet.')
       return
     }
+    if (!validateEmail(trimmedEmail)) return
+
     const activeCooldown = getAuthCooldownSeconds()
     if (activeCooldown > 0) {
       setCooldownSeconds(activeCooldown)
@@ -508,7 +602,7 @@ function AuthPanel({
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmedEmail,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: getAuthRedirectUrl() },
       })
 
       if (error) {
@@ -576,25 +670,49 @@ function AuthPanel({
           Sign out
         </button>
       ) : hasSupabaseConfig ? (
-        <form className="auth-form" onSubmit={sendMagicLink} noValidate>
+        <form className="auth-form" onSubmit={signInWithPassword} noValidate>
           <input
             type="email"
             value={email}
-            placeholder="Email for magic link"
+            placeholder="Email"
             autoComplete="email"
             disabled={busy}
             onChange={(event) => setEmail(event.target.value)}
           />
+          <input
+            type="password"
+            value={password}
+            placeholder="Password"
+            autoComplete="current-password"
+            disabled={busy}
+            onChange={(event) => setPassword(event.target.value)}
+          />
           <button
             type="submit"
-            disabled={busy || cooldownSeconds > 0}
+            disabled={busy}
           >
-            {busy ? <Loader2 className="spin" size={16} /> : <Bell size={16} />}
-            {busy
-              ? 'Sending...'
-              : cooldownSeconds > 0
-                ? `Try again in ${cooldownSeconds}s`
-                : 'Sign in'}
+            {busy ? <Loader2 className="spin" size={16} /> : <KeyRound size={16} />}
+            {busy ? 'Working...' : 'Log in'}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={createAccount}
+          >
+            <UserPlus size={16} />
+            Create account
+          </button>
+          <button
+            type="button"
+            className="text-button auth-link-button"
+            disabled={busy || cooldownSeconds > 0}
+            onClick={sendMagicLink}
+          >
+            <Bell size={16} />
+            {cooldownSeconds > 0
+              ? `Magic link in ${cooldownSeconds}s`
+              : 'Email me a sign-in link'}
           </button>
         </form>
       ) : null}

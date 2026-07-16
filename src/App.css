@@ -745,6 +745,14 @@ button:disabled {
   width: 100%;
 }
 
+.auth-link-button {
+  min-height: auto;
+  padding: 4px 0;
+  background: transparent;
+  color: #cafff5;
+  font-weight: 750;
+}
+
 .secondary-button {
   width: 100%;
   border: 1px solid rgba(158, 231, 217, 0.22);
