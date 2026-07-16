@@ -25,7 +25,6 @@ import { useEffect, useMemo, useState } from 'react'
 import type { DragEvent, FormEvent } from 'react'
 import './App.css'
 import { buildGoogleCalendarUrl, createGoogleCalendarEvent } from './lib/calendar'
-import { classifyTask } from './lib/classify'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import {
   addTask,
@@ -1092,8 +1091,7 @@ function App() {
         (acc, current) => {
           acc[current.key] = tasks.filter((task) => {
             if (task.area !== current.key) return false
-            if (current.key === 'ukg') return task.status === 'active' || task.status === 'done'
-            return task.status === 'active'
+            return task.status === 'active' || task.status === 'done'
           })
           return acc
         },
@@ -1159,7 +1157,7 @@ function App() {
     event.preventDefault()
     if (!draft.trim()) return
 
-    const selectedArea = area === 'today' ? classifyTask(draft) : area
+    const selectedArea = area
     const dueAt = fromDateParts(dueDate, dueTime)
     const reminderMinutes = includeReminder && dueDate && dueTime ? 30 : null
     const inputs = buildTaskInputs(draft, selectedArea, dueAt, reminderMinutes)
