@@ -10,9 +10,8 @@ npm run dev
 ```
 
 Without Supabase keys, the app runs in local demo mode using browser storage.
-With Supabase keys, items still stay on the current device until you sign in with
-email. Cross-device sync starts after the same email account is signed in on each
-device.
+With Supabase keys, every device using the dashboard link reads and writes the
+same shared dashboard. There is no sign-in flow.
 
 ## Connect Supabase
 
@@ -22,9 +21,12 @@ device.
 4. Add your project URL and publishable key from the Supabase Connect panel.
 5. Restart the dev server.
 
-The table uses row-level security so each signed-in email user only sees their
-own dashboard items. Anonymous per-device Supabase sessions are not used for
-cross-device sync because each device gets its own private user id.
+For an existing dashboard project that already has `dashboard_tasks`, run
+`supabase/shared-dashboard-migration.sql` once in the Supabase SQL editor.
+
+The table uses row-level security to limit browser writes to the shared
+`jen-dashboard` sync space. This is intentionally link-based shared sync: anyone
+with the dashboard URL can use the same task board.
 
 ## Calendar Flow
 

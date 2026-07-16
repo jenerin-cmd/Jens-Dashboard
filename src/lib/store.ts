@@ -2,6 +2,7 @@ import type { DashboardTask, NewTaskInput, StoreMode } from './types'
 import { supabase } from './supabase'
 
 const LOCAL_KEY = 'jens-dashboard-tasks-v1'
+const SHARED_DASHBOARD_ID = 'jen-dashboard'
 
 function now() {
   return new Date().toISOString()
@@ -41,29 +42,13 @@ function writeLocalTasks(tasks: DashboardTask[]) {
   localStorage.setItem(LOCAL_KEY, JSON.stringify(tasks))
 }
 
-function taskSignature(task: DashboardTask) {
-  return [
-    task.title,
-    task.notes ?? '',
-    task.area,
-    task.priority,
-    task.status,
-    task.due_at ?? '',
-    task.created_at,
-  ].join('\u0000')
-}
-
-function isMissingAuth(error: unknown) {
-  if (!error || typeof error !== 'object' || !('message' in error)) return false
-  return String(error.message).toLowerCase().includes('auth session missing')
-}
-
 export async function listTasks(mode: StoreMode) {
   if (mode === 'supabase' && supabase) {
     const client = supabase
     const { data, error } = await client
       .from('dashboard_tasks')
       .select('*')
+      .eq('dashboard_id', SHARED_DASHBOARD_ID)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -76,22 +61,10 @@ export async function listTasks(mode: StoreMode) {
 export async function addTask(mode: StoreMode, input: NewTaskInput) {
   if (mode === 'supabase' && supabase) {
     const client = supabase
-    const { data: userData, error: userError } = await client.auth.getUser()
-    if (isMissingAuth(userError)) {
-      const task = createLocalTask(input)
-      writeLocalTasks([task, ...readLocalTasks()])
-      return task
-    }
-    if (userError) throw userError
-    if (!userData.user) {
-      const task = createLocalTask(input)
-      writeLocalTasks([task, ...readLocalTasks()])
-      return task
-    }
-
     const { data, error } = await client
       .from('dashboard_tasks')
       .insert({
+        dashboard_id: SHARED_DASHBOARD_ID,
         title: input.title.trim(),
         notes: input.notes ?? null,
         area: input.area ?? 'today',
@@ -101,7 +74,7 @@ export async function addTask(mode: StoreMode, input: NewTaskInput) {
         reminder_minutes: input.reminder_minutes ?? null,
         cost_estimate: input.cost_estimate ?? null,
         saved_amount: input.saved_amount ?? null,
-        user_id: userData.user.id,
+        user_id: null,
       })
       .select()
       .single()
@@ -126,6 +99,7 @@ export async function updateTask(
       .from('dashboard_tasks')
       .update({ ...patch, updated_at: now() })
       .eq('id', id)
+      .eq('dashboard_id', SHARED_DASHBOARD_ID)
       .select()
       .single()
 
@@ -143,7 +117,11 @@ export async function updateTask(
 export async function deleteTask(mode: StoreMode, id: string) {
   if (mode === 'supabase' && supabase) {
     const client = supabase
-    const { error } = await client.from('dashboard_tasks').delete().eq('id', id)
+    const { error } = await client
+      .from('dashboard_tasks')
+      .delete()
+      .eq('id', id)
+      .eq('dashboard_id', SHARED_DASHBOARD_ID)
     if (error) throw error
     return
   }
@@ -156,13 +134,11 @@ export async function restoreTasks(mode: StoreMode, tasks: DashboardTask[]) {
 
   if (mode === 'supabase' && supabase) {
     const client = supabase
-    const { data: userData, error: userError } = await client.auth.getUser()
-    if (userError) throw userError
-
     const { error } = await client.from('dashboard_tasks').upsert(
       tasks.map((task) => ({
         ...task,
-        user_id: task.user_id ?? userData.user?.id,
+        dashboard_id: SHARED_DASHBOARD_ID,
+        user_id: null,
         updated_at: now(),
       })),
       { onConflict: 'id' },
@@ -186,6 +162,7 @@ export async function clearCompletedTasks(mode: StoreMode, area: DashboardTask['
     const { error } = await client
       .from('dashboard_tasks')
       .update({ status: 'cleared', updated_at: now() })
+      .eq('dashboard_id', SHARED_DASHBOARD_ID)
       .eq('area', area)
       .eq('status', 'done')
 
@@ -207,6 +184,7 @@ export async function clearDoneTasks(mode: StoreMode) {
     const { error } = await client
       .from('dashboard_tasks')
       .update({ status: 'cleared', updated_at: now() })
+      .eq('dashboard_id', SHARED_DASHBOARD_ID)
       .eq('status', 'done')
 
     if (error) throw error
@@ -227,6 +205,7 @@ export async function clearProjectTasks(mode: StoreMode, project: string) {
     const { error } = await client
       .from('dashboard_tasks')
       .update({ status: 'cleared', updated_at: now() })
+      .eq('dashboard_id', SHARED_DASHBOARD_ID)
       .eq('area', 'ukg')
       .eq('notes', project)
       .in('status', ['active', 'done'])
@@ -252,45 +231,16 @@ export async function syncLocalTasksToSupabase() {
   if (!localTasks.length) return
 
   const client = supabase
-  const { data: userData, error: userError } = await client.auth.getUser()
-  if (userError || !userData.user?.email) return
-
   const { error } = await client.from('dashboard_tasks').upsert(
     localTasks.map((task) => ({
       ...task,
-      user_id: userData.user!.id,
+      dashboard_id: SHARED_DASHBOARD_ID,
+      user_id: null,
     })),
     { onConflict: 'id' },
   )
 
   if (error) throw error
-}
-
-export async function copyCurrentSupabaseTasksToLocal() {
-  if (!supabase) return 0
-
-  const { data, error } = await supabase
-    .from('dashboard_tasks')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  if (error) throw error
-
-  const current = readLocalTasks()
-  const existingSignatures = new Set(current.map(taskSignature))
-  const imported = (data ?? [])
-    .filter((task) => !existingSignatures.has(taskSignature(task)))
-    .map((task) => ({
-      ...task,
-      id: crypto.randomUUID(),
-      user_id: null,
-      updated_at: now(),
-    }))
-
-  if (!imported.length) return 0
-
-  writeLocalTasks([...imported, ...current])
-  return imported.length
 }
 
 export function subscribeToTasks(onChange: () => void) {
@@ -301,7 +251,12 @@ export function subscribeToTasks(onChange: () => void) {
     .channel('dashboard-tasks-realtime')
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'dashboard_tasks' },
+      {
+        event: '*',
+        schema: 'public',
+        table: 'dashboard_tasks',
+        filter: `dashboard_id=eq.${SHARED_DASHBOARD_ID}`,
+      },
       onChange,
     )
     .subscribe()

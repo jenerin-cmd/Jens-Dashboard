@@ -7,11 +7,5 @@ const supabasePublishableKey = import.meta.env
 export const hasSupabaseConfig = Boolean(supabaseUrl && supabasePublishableKey)
 
 export const supabase = hasSupabaseConfig
-  ? createClient(supabaseUrl!, supabasePublishableKey!, {
-      auth: {
-        storage: localStorage,
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
+  ? createClient(supabaseUrl!, supabasePublishableKey!)
   : null

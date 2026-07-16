@@ -15,13 +15,9 @@ import {
   CloudSun,
   ClipboardList,
   Eraser,
-  Eye,
-  EyeOff,
   GripVertical,
   Home,
-  KeyRound,
   Loader2,
-  LogOut,
   Pause,
   Pencil,
   Play,
@@ -32,20 +28,18 @@ import {
   Target,
   Trash2,
   Undo2,
-  UserPlus,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { DragEvent, FormEvent } from 'react'
 import './App.css'
 import { buildGoogleCalendarUrl, createGoogleCalendarEvent } from './lib/calendar'
-import { hasSupabaseConfig, supabase } from './lib/supabase'
+import { hasSupabaseConfig } from './lib/supabase'
 import {
   addTask,
   clearDoneTasks,
   clearCompletedTasks,
   clearProjectTasks,
-  copyCurrentSupabaseTasksToLocal,
   deleteTask,
   listTasks,
   restoreTasks,
@@ -115,22 +109,12 @@ const areas: AreaConfig[] = [
   },
 ]
 
-const AUTH_COOLDOWN_KEY = 'jens-dashboard-auth-cooldown-until'
 const AREA_ORDER_KEY = 'jens-dashboard-area-order-v1'
 const WEATHER_LOCATION_KEY = 'jens-dashboard-weather-location'
 const WEATHER_CACHE_KEY = 'jens-dashboard-weather-cache-v1'
 const POMODORO_SECONDS = 25 * 60
 const defaultAreaOrder = areas.map((item) => item.key)
 const rightRailAreaKeys = new Set<AreaKey>(['home', 'money'])
-
-type SyncUser = {
-  email?: string | null
-  is_anonymous?: boolean
-}
-
-function isCrossDeviceUser(user: SyncUser | null | undefined) {
-  return Boolean(user?.email && !user.is_anonymous)
-}
 
 type WeatherState = {
   name: string
@@ -417,335 +401,17 @@ function buildTaskInputs(
   )
 }
 
-function getAuthCooldownSeconds() {
-  const cooldownUntil = Number(localStorage.getItem(AUTH_COOLDOWN_KEY) ?? 0)
-  if (!cooldownUntil) return 0
-
-  const remainingMs = cooldownUntil - Date.now()
-  if (remainingMs <= 0) {
-    localStorage.removeItem(AUTH_COOLDOWN_KEY)
-    return 0
-  }
-
-  return Math.ceil(remainingMs / 1000)
-}
-
-function saveAuthCooldown(seconds: number) {
-  localStorage.setItem(AUTH_COOLDOWN_KEY, String(Date.now() + seconds * 1000))
-}
-
-function AuthPanel({
-  syncNotice,
-  onAuthChange,
-}: {
-  syncNotice: string
-  onAuthChange: () => void
-}) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null)
-  const [cooldownSeconds, setCooldownSeconds] = useState(0)
-
-  function getAuthRedirectUrl() {
-    return window.location.href.split('#')[0].split('?')[0]
-  }
-
-  function normalizeEmail() {
-    return email.trim().toLowerCase()
-  }
-
-  function friendlyAuthError(errorMessage: string) {
-    const normalized = errorMessage.toLowerCase()
-    if (normalized.includes('invalid login credentials')) {
-      return 'Supabase did not match that login. Check the exact signed-in email shown on the iPad, then use that same email here.'
-    }
-    if (normalized.includes('email not confirmed')) {
-      return 'That account still needs email confirmation. Use the confirmation email once, then log in here with the same password.'
-    }
-    return errorMessage
-  }
-
-  function validateEmail(trimmedEmail: string) {
-    if (!trimmedEmail) {
-      setMessage('Enter your email first.')
-      return false
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setMessage('Enter a valid email address.')
-      return false
-    }
-    return true
-  }
-
-  function validatePassword() {
-    if (password.length < 6) {
-      setMessage('Password needs at least 6 characters.')
-      return false
-    }
-    return true
-  }
-
-  async function refreshUser() {
-    if (!supabase) return
-
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    setSignedInEmail(isCrossDeviceUser(user) ? user?.email ?? null : null)
-  }
-
-  useEffect(() => {
-    refreshUser()
-    setCooldownSeconds(getAuthCooldownSeconds())
-
-    const authSubscription = supabase?.auth.onAuthStateChange(() => {
-      refreshUser()
-    })
-
-    return () => {
-      authSubscription?.data.subscription.unsubscribe()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (cooldownSeconds <= 0) return undefined
-
-    const timer = window.setTimeout(() => {
-      setCooldownSeconds(getAuthCooldownSeconds())
-    }, 1000)
-
-    return () => window.clearTimeout(timer)
-  }, [cooldownSeconds])
-
-  function startCooldown(seconds: number) {
-    saveAuthCooldown(seconds)
-    setCooldownSeconds(seconds)
-  }
-
-  async function signInWithPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const trimmedEmail = normalizeEmail()
-    if (!supabase) {
-      setMessage('Supabase is not connected yet.')
-      return
-    }
-    if (!validateEmail(trimmedEmail) || !validatePassword()) return
-
-    setBusy(true)
-    setMessage(`Signing in as ${trimmedEmail}...`)
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
-      })
-
-      if (error) {
-        setMessage(friendlyAuthError(error.message))
-        return
-      }
-
-      setMessage('Signed in. Sync is on.')
-      setPassword('')
-      onAuthChange()
-      await refreshUser()
-    } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : 'Could not sign in.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function createAccount() {
-    const trimmedEmail = normalizeEmail()
-    if (!supabase) {
-      setMessage('Supabase is not connected yet.')
-      return
-    }
-    if (!validateEmail(trimmedEmail) || !validatePassword()) return
-
-    setBusy(true)
-    setMessage(`Creating account for ${trimmedEmail}...`)
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: trimmedEmail,
-        password,
-        options: { emailRedirectTo: getAuthRedirectUrl() },
-      })
-
-      if (error) {
-        setMessage(friendlyAuthError(error.message))
-        return
-      }
-
-      setMessage(
-        data.session
-          ? 'Account created. Sync is on.'
-          : 'Account created. If Supabase asks to confirm it, use the email link once.',
-      )
-      if (data.session) {
-        setPassword('')
-        onAuthChange()
-        await refreshUser()
-      }
-    } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : 'Could not create account.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function sendMagicLink() {
-    const trimmedEmail = normalizeEmail()
-    if (!supabase) {
-      setMessage('Supabase is not connected yet.')
-      return
-    }
-    if (!validateEmail(trimmedEmail)) return
-
-    const activeCooldown = getAuthCooldownSeconds()
-    if (activeCooldown > 0) {
-      setCooldownSeconds(activeCooldown)
-      setMessage(`Wait ${activeCooldown}s before requesting another sign-in link.`)
-      return
-    }
-
-    setBusy(true)
-    setMessage(`Sending a sign-in link to ${trimmedEmail}...`)
-
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: trimmedEmail,
-        options: { emailRedirectTo: getAuthRedirectUrl() },
-      })
-
-      if (error) {
-        const isRateLimit = error.message.toLowerCase().includes('rate limit')
-        setMessage(
-          isRateLimit
-            ? 'Supabase is rate-limiting sign-in emails. Wait a few minutes, then try again.'
-            : friendlyAuthError(error.message),
-        )
-        if (isRateLimit) startCooldown(300)
-        return
-      }
-
-      setMessage('Check your email for the sign-in link.')
-      startCooldown(60)
-      onAuthChange()
-    } catch (caught) {
-      setMessage(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not send the sign-in link.',
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function signOut() {
-    if (!supabase) return
-
-    setBusy(true)
-    setMessage('')
-
-    try {
-      const { error } = await supabase.auth.signOut()
-      setMessage(error ? error.message : 'Signed out.')
-      setSignedInEmail(null)
-      onAuthChange()
-    } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : 'Could not sign out.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const isSynced = Boolean(signedInEmail)
-
+function SyncPanel({ mode }: { mode: StoreMode }) {
   return (
-    <div className="auth-panel">
+    <div className="sync-panel">
       <div>
-        <strong>Supabase sync</strong>
+        <strong>Shared sync</strong>
         <span>
-          {signedInEmail
-            ? `Signed in as ${signedInEmail}. Syncing across devices.`
-            : syncNotice
-              ? syncNotice
-            : hasSupabaseConfig
-              ? 'Sign in to sync across devices.'
-              : 'Add Supabase keys to enable cross-device sync.'}
+          {mode === 'supabase'
+            ? 'On for this dashboard link. No sign-in needed.'
+            : 'Local-only mode. Add Supabase keys to sync across devices.'}
         </span>
       </div>
-      {isSynced ? (
-        <button type="button" className="secondary-button" onClick={signOut} disabled={busy}>
-          {busy ? <Loader2 className="spin" size={16} /> : <LogOut size={16} />}
-          Sign out
-        </button>
-      ) : hasSupabaseConfig ? (
-        <form className="auth-form" onSubmit={signInWithPassword} noValidate>
-          <input
-            type="email"
-            value={email}
-            placeholder="Email"
-            autoComplete="email"
-            disabled={busy}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-          <div className="password-field">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              placeholder="Password"
-              autoComplete="current-password"
-              disabled={busy}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <button
-              type="button"
-              className="icon-button"
-              disabled={busy}
-              onClick={() => setShowPassword((value) => !value)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          <button
-            type="submit"
-            disabled={busy}
-          >
-            {busy ? <Loader2 className="spin" size={16} /> : <KeyRound size={16} />}
-            {busy ? 'Working...' : 'Log in'}
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={createAccount}
-          >
-            <UserPlus size={16} />
-            Create account
-          </button>
-          <button
-            type="button"
-            className="text-button auth-link-button"
-            disabled={busy || cooldownSeconds > 0}
-            onClick={sendMagicLink}
-          >
-            <Bell size={16} />
-            {cooldownSeconds > 0
-              ? `Magic link in ${cooldownSeconds}s`
-              : 'Email me a sign-in link'}
-          </button>
-        </form>
-      ) : null}
-      {message ? <p>{message}</p> : null}
     </div>
   )
 }
@@ -1367,15 +1033,12 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [syncNotice, setSyncNotice] = useState('')
   const [areaOrder, setAreaOrder] = useState<AreaKey[]>(readAreaOrder)
   const [draggedArea, setDraggedArea] = useState<AreaKey | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [undoAction, setUndoAction] = useState<UndoAction | null>(null)
-  const [hasSupabaseSession, setHasSupabaseSession] = useState(false)
 
-  const mode: StoreMode =
-    hasSupabaseConfig && hasSupabaseSession ? 'supabase' : 'local'
+  const mode: StoreMode = hasSupabaseConfig ? 'supabase' : 'local'
   const areaByKey = useMemo(
     () => new Map(areas.map((item) => [item.key, item])),
     [],
@@ -1423,77 +1086,12 @@ function App() {
     refreshTasks()
     const unsubscribe =
       mode === 'supabase' ? subscribeToTasks(refreshTasks) : () => undefined
-    const authSubscription = supabase?.auth.onAuthStateChange((_event, session) => {
-      setHasSupabaseSession(isCrossDeviceUser(session?.user))
-      refreshTasks()
-    })
 
     return () => {
       unsubscribe()
-      authSubscription?.data.subscription.unsubscribe()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
-
-  useEffect(() => {
-    if (!supabase) return undefined
-
-    let cancelled = false
-
-    async function activateSupabaseSession() {
-      const { data: sessionData, error } = await supabase!.auth.getSession()
-      if (cancelled) return
-
-      if (error) {
-        setSyncNotice('Saving on this device. Sign in again to sync across devices.')
-        return
-      }
-
-      const user = sessionData.session?.user
-      if (isCrossDeviceUser(user)) {
-        setHasSupabaseSession(true)
-        setSyncNotice('')
-        return
-      }
-
-      if (user) {
-        try {
-          const importedCount = await copyCurrentSupabaseTasksToLocal()
-          await supabase!.auth.signOut()
-          if (cancelled) return
-          setHasSupabaseSession(false)
-          setSyncNotice(
-            importedCount > 0
-              ? 'Moved device-only items here. Sign in to sync them across iPad and laptop.'
-              : 'Sign in to sync across iPad and laptop.',
-          )
-          const next = await listTasks('local')
-          if (!cancelled) {
-            setTasks(next)
-            setLoading(false)
-          }
-        } catch (caught) {
-          if (cancelled) return
-          setSyncNotice('Sign in to sync across iPad and laptop.')
-          setError(
-            caught instanceof Error
-              ? caught.message
-              : 'Could not move device-only items into local storage.',
-          )
-        }
-        return
-      }
-
-      setHasSupabaseSession(false)
-      setSyncNotice('Sign in to sync across iPad and laptop.')
-    }
-
-    activateSupabaseSession()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   useEffect(() => {
     if (!dueDate || !dueTime) setIncludeReminder(false)
@@ -1854,7 +1452,7 @@ function App() {
         <aside className="side-rail">
           <MonthCalendar />
           {rightRailAreas.map((item) => renderAreaSection(item))}
-          <AuthPanel syncNotice={syncNotice} onAuthChange={refreshTasks} />
+          <SyncPanel mode={mode} />
         </aside>
       </div>
     </main>

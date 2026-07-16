@@ -55,8 +55,8 @@
 .title-block p,
 .focus-panel p,
 .system-note p,
-.auth-panel span,
-.auth-panel p,
+.sync-panel span,
+.sync-panel p,
 .empty-state,
 .task-card p {
   color: #cfc2df;
@@ -74,7 +74,7 @@
 .focus-panel strong,
 .top-widget > span,
 .system-note strong,
-.auth-panel strong {
+.sync-panel strong {
   color: #ffffff;
   font-size: 1rem;
 }
@@ -723,7 +723,7 @@ button:disabled {
   color: #1b1029;
 }
 
-.auth-panel,
+.sync-panel,
 .system-note {
   display: grid;
   gap: 12px;
@@ -731,41 +731,9 @@ button:disabled {
   border-radius: 8px;
 }
 
-.auth-panel > div:first-child {
+.sync-panel > div:first-child {
   display: grid;
   gap: 3px;
-}
-
-.auth-form {
-  display: grid;
-  gap: 8px;
-}
-
-.auth-form button {
-  width: 100%;
-}
-
-.password-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
-  gap: 8px;
-}
-
-.password-field input {
-  min-width: 0;
-}
-
-.password-field .icon-button {
-  width: 42px;
-  min-height: 42px;
-}
-
-.auth-link-button {
-  min-height: auto;
-  padding: 4px 0;
-  background: transparent;
-  color: #cafff5;
-  font-weight: 750;
 }
 
 .secondary-button {

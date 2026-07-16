@@ -13,6 +13,7 @@ export type TaskStatus = 'active' | 'done' | 'cleared'
 
 export type DashboardTask = {
   id: string
+  dashboard_id?: string | null
   user_id?: string | null
   title: string
   notes?: string | null

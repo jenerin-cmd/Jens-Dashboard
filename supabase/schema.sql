@@ -3,7 +3,8 @@
 
 create table if not exists public.dashboard_tasks (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  dashboard_id text not null default 'jen-dashboard',
+  user_id uuid references auth.users(id) on delete cascade,
   title text not null check (char_length(trim(title)) > 0),
   notes text,
   area text not null default 'today'
@@ -21,6 +22,15 @@ create table if not exists public.dashboard_tasks (
 );
 
 alter table public.dashboard_tasks
+add column if not exists dashboard_id text not null default 'jen-dashboard';
+
+alter table public.dashboard_tasks
+alter column dashboard_id set default 'jen-dashboard';
+
+alter table public.dashboard_tasks
+alter column user_id drop not null;
+
+alter table public.dashboard_tasks
 drop constraint if exists dashboard_tasks_area_check;
 
 alter table public.dashboard_tasks
@@ -36,36 +46,41 @@ check (status in ('active', 'done', 'cleared'));
 
 alter table public.dashboard_tasks enable row level security;
 
-grant select, insert, update, delete on public.dashboard_tasks to authenticated;
+grant select, insert, update, delete on public.dashboard_tasks to anon, authenticated;
 
 drop policy if exists "Users can read their own dashboard tasks" on public.dashboard_tasks;
-create policy "Users can read their own dashboard tasks"
+drop policy if exists "Users can create their own dashboard tasks" on public.dashboard_tasks;
+drop policy if exists "Users can update their own dashboard tasks" on public.dashboard_tasks;
+drop policy if exists "Users can delete their own dashboard tasks" on public.dashboard_tasks;
+drop policy if exists "Shared dashboard can read tasks" on public.dashboard_tasks;
+drop policy if exists "Shared dashboard can create tasks" on public.dashboard_tasks;
+drop policy if exists "Shared dashboard can update tasks" on public.dashboard_tasks;
+drop policy if exists "Shared dashboard can delete tasks" on public.dashboard_tasks;
+
+create policy "Shared dashboard can read tasks"
 on public.dashboard_tasks
 for select
-to authenticated
-using ((select auth.uid()) = user_id);
+to anon, authenticated
+using (dashboard_id = 'jen-dashboard');
 
-drop policy if exists "Users can create their own dashboard tasks" on public.dashboard_tasks;
-create policy "Users can create their own dashboard tasks"
+create policy "Shared dashboard can create tasks"
 on public.dashboard_tasks
 for insert
-to authenticated
-with check ((select auth.uid()) = user_id);
+to anon, authenticated
+with check (dashboard_id = 'jen-dashboard');
 
-drop policy if exists "Users can update their own dashboard tasks" on public.dashboard_tasks;
-create policy "Users can update their own dashboard tasks"
+create policy "Shared dashboard can update tasks"
 on public.dashboard_tasks
 for update
-to authenticated
-using ((select auth.uid()) = user_id)
-with check ((select auth.uid()) = user_id);
+to anon, authenticated
+using (dashboard_id = 'jen-dashboard')
+with check (dashboard_id = 'jen-dashboard');
 
-drop policy if exists "Users can delete their own dashboard tasks" on public.dashboard_tasks;
-create policy "Users can delete their own dashboard tasks"
+create policy "Shared dashboard can delete tasks"
 on public.dashboard_tasks
 for delete
-to authenticated
-using ((select auth.uid()) = user_id);
+to anon, authenticated
+using (dashboard_id = 'jen-dashboard');
 
 create or replace function public.set_dashboard_tasks_updated_at()
 returns trigger
