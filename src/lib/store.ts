@@ -224,25 +224,6 @@ export async function clearProjectTasks(mode: StoreMode, project: string) {
   writeLocalTasks(tasks)
 }
 
-export async function syncLocalTasksToSupabase() {
-  if (!supabase) return
-
-  const localTasks = readLocalTasks()
-  if (!localTasks.length) return
-
-  const client = supabase
-  const { error } = await client.from('dashboard_tasks').upsert(
-    localTasks.map((task) => ({
-      ...task,
-      dashboard_id: SHARED_DASHBOARD_ID,
-      user_id: null,
-    })),
-    { onConflict: 'id' },
-  )
-
-  if (error) throw error
-}
-
 export function subscribeToTasks(onChange: () => void) {
   if (!supabase) return () => undefined
 

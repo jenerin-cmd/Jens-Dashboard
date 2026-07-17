@@ -289,7 +289,6 @@ button:disabled {
   border-radius: 0;
   background: rgba(255, 255, 255, 0.03);
   color: #fff;
-  cursor: grab;
   user-select: none;
 }
 
@@ -325,6 +324,11 @@ button:disabled {
   cursor: grabbing;
 }
 
+.drag-handle-button:disabled {
+  color: #5d526f;
+  cursor: default;
+}
+
 .area-heading strong,
 .area-heading small {
   min-width: 0;
@@ -354,15 +358,6 @@ button:disabled {
 
 .area-section.dragging {
   opacity: 0.58;
-}
-
-.area-section.task-drop-target {
-  outline: 2px solid rgba(158, 231, 217, 0.62);
-  outline-offset: 3px;
-}
-
-.area-section.task-drop-target .task-list {
-  background: rgba(158, 231, 217, 0.06);
 }
 
 .count-pill,
@@ -464,16 +459,6 @@ button:disabled {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
   background: rgba(10, 7, 18, 0.42);
-  cursor: grab;
-}
-
-.task-card:active {
-  cursor: grabbing;
-}
-
-.task-card.task-dragging {
-  opacity: 0.5;
-  outline: 2px solid rgba(158, 231, 217, 0.45);
 }
 
 .task-card.done {
@@ -595,12 +580,28 @@ button:disabled {
   flex: 1 1 160px;
 }
 
-.project-task-control input {
+.task-move-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #bdb5c9;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.project-task-control input,
+.task-move-control select {
   min-width: 0;
   width: 100%;
   min-height: 30px;
   padding: 5px 9px;
   font-size: 0.78rem;
+}
+
+.task-move-control select {
+  width: auto;
+  max-width: 170px;
 }
 
 .text-button {
@@ -735,6 +736,28 @@ button:disabled {
 .sync-panel > div:first-child {
   display: grid;
   gap: 3px;
+}
+
+.save-status {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d8d3e6;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.save-status-saving {
+  color: #b8fff2;
+}
+
+.save-status-saved {
+  color: #9ee7d9;
+}
+
+.save-status-error {
+  color: #ffd3e8;
 }
 
 .secondary-button {
