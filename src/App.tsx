@@ -1,7 +1,8 @@
 import {
+  ArrowDown,
+  ArrowUp,
   Banknote,
   Bell,
-  BriefcaseBusiness,
   CalendarDays,
   CalendarPlus,
   Check,
@@ -87,16 +88,9 @@ const areas: AreaConfig[] = [
     icon: Home,
   },
   {
-    key: 'business',
-    label: 'ClearDesk + App',
-    short: 'Build and sell',
-    empty: 'Leads, offers, ads, app work, and follow-ups live here.',
-    icon: BriefcaseBusiness,
-  },
-  {
     key: 'money',
-    label: 'Money Moves',
-    short: 'Revenue first',
+    label: 'Side Hustles/Money Moves',
+    short: 'Revenue + ideas',
     empty: 'Put one thing here that can help money come in.',
     icon: Banknote,
   },
@@ -825,6 +819,7 @@ function AreaSection({
   isTaskDropTarget,
   onClearCompleted,
   onClearProject,
+  onMoveArea,
   onDragStart,
   onDragOver,
   onDrop,
@@ -843,6 +838,7 @@ function AreaSection({
   isTaskDropTarget: boolean
   onClearCompleted: () => void
   onClearProject: (project: string) => void
+  onMoveArea: (area: AreaKey, direction: -1 | 1) => void
   onDragStart: (area: AreaKey) => void
   onDragOver: (event: DragEvent<HTMLElement>) => void
   onDrop: (area: AreaKey) => void
@@ -921,6 +917,7 @@ function AreaSection({
               event.stopPropagation()
               onDragStart(area.key)
               event.dataTransfer.effectAllowed = 'move'
+              event.dataTransfer.setData('text/plain', area.key)
             }}
             aria-label={`Move ${area.label} tile`}
           >
@@ -931,6 +928,22 @@ function AreaSection({
           <small>{area.short}</small>
         </span>
         <div className="area-controls">
+          <button
+            type="button"
+            className="mini-button"
+            onClick={() => onMoveArea(area.key, -1)}
+            aria-label={`Move ${area.label} earlier`}
+          >
+            <ArrowUp size={14} />
+          </button>
+          <button
+            type="button"
+            className="mini-button"
+            onClick={() => onMoveArea(area.key, 1)}
+            aria-label={`Move ${area.label} later`}
+          >
+            <ArrowDown size={14} />
+          </button>
           {area.key === 'ukg' && doneCount > 0 ? (
             <button
               type="button"
@@ -1127,8 +1140,7 @@ function App() {
     [tasks],
   )
   const completedCount = tasks.filter((task) => task.status === 'done').length
-  const moneyCount =
-    (grouped.money?.length ?? 0) + (grouped.business?.length ?? 0)
+  const moneyCount = grouped.money?.length ?? 0
   const today = new Date()
   const isWeekend = today.getDay() === 0 || today.getDay() === 6
   const workFocus = getWorkFocus(tasks)
@@ -1164,6 +1176,19 @@ function App() {
     nextOrder.splice(targetIndex, 0, draggedArea)
     updateAreaOrder(nextOrder)
     setDraggedArea(null)
+  }
+
+  function moveArea(areaKey: AreaKey, direction: -1 | 1) {
+    const currentOrder = normalizeAreaOrder(areaOrder)
+    const index = currentOrder.indexOf(areaKey)
+    const nextIndex = index + direction
+
+    if (index < 0 || nextIndex < 0 || nextIndex >= currentOrder.length) return
+
+    const nextOrder = [...currentOrder]
+    const [movedArea] = nextOrder.splice(index, 1)
+    nextOrder.splice(nextIndex, 0, movedArea)
+    updateAreaOrder(nextOrder)
   }
 
   function setTaskUndo(label: string, previousTasks: DashboardTask[]) {
@@ -1327,6 +1352,7 @@ function App() {
         isTaskDropTarget={Boolean(draggedTaskId) && !grouped[item.key]?.some((task) => task.id === draggedTaskId)}
         onClearCompleted={clearUkgCompleted}
         onClearProject={clearUkgProject}
+        onMoveArea={moveArea}
         onDragStart={setDraggedArea}
         onDragOver={(event) => event.preventDefault()}
         onDrop={dropArea}
@@ -1364,7 +1390,7 @@ function App() {
           <strong>{focusTitle}</strong>
           <p>{focusCopy}</p>
           <div>
-            <span>{moneyCount} money/business items</span>
+            <span>{moneyCount} side hustle/money items</span>
             <span>{completedCount} completed</span>
           </div>
         </div>

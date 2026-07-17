@@ -311,13 +311,14 @@ button:disabled {
   align-items: center;
   justify-content: center;
   grid-row: span 2;
-  width: 22px;
-  min-height: 38px;
+  width: 30px;
+  min-height: 40px;
   padding: 0;
   border: 0;
   background: transparent;
   color: #8f7fa5;
   cursor: grab;
+  touch-action: none;
 }
 
 .drag-handle-button:active {
