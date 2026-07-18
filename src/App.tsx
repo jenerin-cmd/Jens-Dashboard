@@ -342,7 +342,7 @@ function buildTaskInputs(
     .map((line) => line.trim())
     .filter(Boolean)
 
-  if (selectedArea !== 'ukg' || lines.length < 2) {
+  if (lines.length < 2) {
     return [
       {
         title: text.trim(),
@@ -355,6 +355,22 @@ function buildTaskInputs(
             : 'normal',
       } satisfies NewTaskInput,
     ]
+  }
+
+  if (selectedArea !== 'ukg') {
+    return lines
+      .map(cleanChecklistItem)
+      .filter(Boolean)
+      .map((title) => ({
+        title,
+        area: selectedArea,
+        due_at: dueAt,
+        reminder_minutes: reminderMinutes,
+        priority:
+          selectedArea === 'money' || selectedArea === 'business'
+            ? 'high'
+            : 'normal',
+      }) satisfies NewTaskInput)
   }
 
   const projectHeaderCount = lines.filter(isProjectHeader).length
@@ -730,16 +746,14 @@ function TaskCard({
           ) : (
             <div className="task-title-row">
               <h3>{task.title}</h3>
-              {task.area === 'ukg' ? (
-                <button
-                  type="button"
-                  className="edit-task-button"
-                  aria-label="Edit UKG to-do"
-                  onClick={() => setEditing(true)}
-                >
-                  <Pencil size={14} />
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="edit-task-button"
+                aria-label="Edit to-do"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil size={14} />
+              </button>
             </div>
           )}
           {task.notes && !hideNotes ? <p>{task.notes}</p> : null}
