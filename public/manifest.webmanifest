@@ -1,14 +1,15 @@
 {
   "name": "Jen's Dashboard",
   "short_name": "Dashboard",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#160e28",
   "theme_color": "#160e28",
   "description": "A personal dashboard for goals, money moves, home projects, and reminders.",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "./favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
